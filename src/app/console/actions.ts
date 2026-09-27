@@ -20,7 +20,7 @@ import { embedPending, searchKnowledge } from "@/lib/embeddings";
 import { runHealthCheck as healthCheck } from "@/lib/health";
 import { listConnectorTools, tokenKey } from "@/lib/mcp";
 import { keepVersion, snapshotOf } from "@/lib/personas";
-import type { Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
+import type { Agency, Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
@@ -295,6 +295,8 @@ export type OnboardInput = {
   knowledge: string;
   knowledgeUrl: string;
   introPricing: boolean;
+  /** The agency that owns this client; agency admins always onboard under their own. */
+  agencyId?: string | null;
 };
 
 /**
@@ -305,12 +307,13 @@ export type OnboardInput = {
 export async function onboardBusiness(input: OnboardInput) {
   return wrap(async () => {
     const session = await getSession();
-    if (!session?.isPlatformAdmin) return { ok: false, error: "Only platform admins can add a business." };
+    if (!session || (!session.isPlatformAdmin && !session.agencyIds.length)) return { ok: false, error: "Only the Wally team or an agency admin can add a business." };
     const name = input.name.trim();
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     if (!slug) return { ok: false, error: "Enter a business name." };
+    const agencyId = session.isPlatformAdmin ? input.agencyId || null : session.agencyIds.includes(input.agencyId ?? "") ? input.agencyId! : session.agencyIds[0];
     const { store } = session;
-    const t = await store.createTenant({ name, slug });
+    const t = await store.createTenant({ name, slug, agencyId });
     const frontName = input.staff.find((s) => getRole(s.roleKey)?.category === "Front desk")?.name;
     await store.updateTenant(t.id, {
       name,
@@ -544,5 +547,59 @@ export async function loadStarterData() {
     for (const k of STARTER_KNOWLEDGE) await store.addKnowledge(tenant.id, k);
     await store.audit(tenant.id, { actorType: "user", actor: session.user.email, action: "tenant.seeded", detail: {} });
     return { ok: true, message: "Sunsational Tobago is ready.", data: tenant.slug };
+  });
+}
+
+/* ---------------------------------------------------------------- agencies */
+
+const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+export async function createAgency(name: string) {
+  return wrap(async () => {
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) return { ok: false, error: "Only the Wally team can add an agency." };
+    const slug = slugOf(name);
+    if (!slug) return { ok: false, error: "Enter the agency's name." };
+    await session.store.createAgency({ name: name.trim(), slug });
+    return { ok: true, message: `${name.trim()} added.` };
+  });
+}
+
+/**
+ * The Wally team sets everything, margin included. An agency's own admins
+ * may change only their branding and support email.
+ */
+export async function saveAgency(agencyId: string, patch: Pick<Agency, "name" | "supportEmail" | "branding" | "marginPct">) {
+  return wrap(async () => {
+    const session = await getSession();
+    if (!session) throw new Error("Your session expired. Sign in again.");
+    const clean = { ...patch, marginPct: Math.min(90, Math.max(0, Number(patch.marginPct) || 0)), supportEmail: patch.supportEmail?.trim() || null };
+    if (session.isPlatformAdmin) {
+      await session.store.updateAgency(agencyId, clean);
+    } else if (session.agencyIds.includes(agencyId)) {
+      await systemStore().updateAgency(agencyId, { branding: clean.branding, supportEmail: clean.supportEmail });
+    } else {
+      return { ok: false, error: "You don't manage that agency." };
+    }
+    return { ok: true, message: "Agency saved." };
+  });
+}
+
+export async function inviteAgencyAdmin(agencyId: string, email: string) {
+  return wrap(async () => {
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) return { ok: false, error: "Only the Wally team can add agency admins." };
+    const e = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, error: "Enter a valid email address." };
+    await session.store.addAgencyInvite(agencyId, e, session.user.email);
+    return { ok: true, message: `${e} becomes an admin the first time they sign in to Wally.` };
+  });
+}
+
+export async function removeAgencyInvite(agencyId: string, inviteId: string) {
+  return wrap(async () => {
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) return { ok: false, error: "Only the Wally team can change agency admins." };
+    await session.store.deleteAgencyInvite(agencyId, inviteId);
   });
 }

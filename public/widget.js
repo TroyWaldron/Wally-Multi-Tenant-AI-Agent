@@ -150,7 +150,7 @@
     panel.appendChild(log);
     panel.appendChild(typing);
     panel.appendChild(form);
-    panel.appendChild(el("div", { class: "foot" }, "Powered by Wally"));
+    panel.appendChild(el("div", { class: "foot" }, cfg.poweredBy || "Powered by Wally"));
     root.appendChild(panel);
     root.appendChild(launch);
 

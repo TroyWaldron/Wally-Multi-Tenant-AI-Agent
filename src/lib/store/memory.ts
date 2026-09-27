@@ -8,6 +8,8 @@ import { ROLE_LIBRARY } from "@/lib/roles";
 import { STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
 import { assertTenant, type Store } from "@/lib/store/types";
 import type {
+  Agency,
+  AgencyInvite,
   Agent,
   AgentVersion,
   Approval,
@@ -26,6 +28,8 @@ import type {
 
 type Db = {
   tenants: Tenant[];
+  agencies?: Agency[];
+  agencyInvites?: AgencyInvite[];
   agents: Agent[];
   channels: Channel[];
   contracts: Contract[];
@@ -143,6 +147,11 @@ function db(): Db {
   return g.__wallyDemoDb;
 }
 
+// The demo business belongs to Novate, the first agency.
+function agencies(): Agency[] {
+  return (db().agencies ??= [{ id: "novate", name: "Novate Solutions", slug: "novate", marginPct: 20, supportEmail: null, branding: {} }]);
+}
+
 const byNewest = <T extends { createdAt: string }>(a: T, b: T) => (a.createdAt < b.createdAt ? 1 : -1);
 
 export const memoryStore: Store = {
@@ -181,6 +190,32 @@ export const memoryStore: Store = {
   async updateTenant(id, patch) {
     const t = db().tenants.find((x) => x.id === id);
     if (t) Object.assign(t, patch, { id: t.id, publicKey: t.publicKey });
+  },
+
+  async listAgencies() {
+    return agencies();
+  },
+  async getAgency(id) {
+    return agencies().find((a) => a.id === id) ?? null;
+  },
+  async createAgency(input) {
+    const a: Agency = { id: randomUUID(), marginPct: 20, supportEmail: null, branding: {}, ...input };
+    agencies().push(a);
+    return a;
+  },
+  async updateAgency(id, patch) {
+    const a = agencies().find((x) => x.id === id);
+    if (a) Object.assign(a, patch, { id: a.id });
+  },
+  async listAgencyInvites(agencyId) {
+    return (db().agencyInvites ??= []).filter((i) => i.agencyId === agencyId);
+  },
+  async addAgencyInvite(agencyId, email, invitedBy) {
+    const list = (db().agencyInvites ??= []);
+    if (!list.some((i) => i.agencyId === agencyId && i.email === email)) list.push({ id: randomUUID(), agencyId, email, invitedBy, createdAt: now() });
+  },
+  async deleteAgencyInvite(agencyId, id) {
+    db().agencyInvites = (db().agencyInvites ?? []).filter((i) => !(i.agencyId === agencyId && i.id === id));
   },
 
   async listTemplates(tenantId) {

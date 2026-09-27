@@ -17,6 +17,8 @@ export type Session = {
   mode: "demo" | "supabase";
   user: { id: string; email: string };
   isPlatformAdmin: boolean;
+  /** Agencies this person administers (white-label resellers such as Novate). */
+  agencyIds: string[];
   /** RLS-scoped store for console reads and writes. */
   store: Store;
 };
@@ -53,7 +55,7 @@ export async function getSession(): Promise<Session | null> {
       const jar = await cookies();
       if (jar.get(DEMO_COOKIE)?.value !== demoToken(password)) return null;
     }
-    return { mode: "demo", user: { id: "demo", email: "demo@wally.local" }, isPlatformAdmin: true, store: memoryStore };
+    return { mode: "demo", user: { id: "demo", email: "demo@wally.local" }, isPlatformAdmin: true, agencyIds: [], store: memoryStore };
   }
 
   const db = await userClient();
@@ -61,20 +63,34 @@ export async function getSession(): Promise<Session | null> {
   if (!data.user) return null;
   const email = data.user.email ?? "";
 
-  let { data: memberships } = await db.from("memberships").select("role").eq("user_id", data.user.id);
+  let { data: memberships } = await db.from("memberships").select("role, agency_id").eq("user_id", data.user.id);
   const admins = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
   if (!memberships?.some((m) => m.role === "platform_admin") && admins.includes(email.toLowerCase())) {
     await serviceClient().from("memberships").insert({ user_id: data.user.id, role: "platform_admin" });
-    memberships = [...(memberships ?? []), { role: "platform_admin" }];
+    memberships = [...(memberships ?? []), { role: "platform_admin", agency_id: null }];
+  }
+
+  // Agency admin invites wait for the person's first sign-in.
+  if (email) {
+    const svc = serviceClient();
+    const { data: invites } = await svc.from("agency_invites").select("id, agency_id").eq("email", email.toLowerCase());
+    for (const inv of invites ?? []) {
+      if (!memberships?.some((m) => m.role === "agency_admin" && m.agency_id === inv.agency_id)) {
+        await svc.from("memberships").insert({ user_id: data.user.id, agency_id: inv.agency_id, role: "agency_admin" });
+        memberships = [...(memberships ?? []), { role: "agency_admin", agency_id: inv.agency_id }];
+      }
+      await svc.from("agency_invites").delete().eq("id", inv.id);
+    }
   }
 
   return {
     mode: "supabase",
     user: { id: data.user.id, email },
     isPlatformAdmin: Boolean(memberships?.some((m) => m.role === "platform_admin")),
+    agencyIds: (memberships ?? []).filter((m) => m.role === "agency_admin" && m.agency_id).map((m) => m.agency_id as string),
     store: supabaseStore(db),
   };
 }

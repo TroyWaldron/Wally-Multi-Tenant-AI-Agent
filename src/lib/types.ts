@@ -37,7 +37,19 @@ export type RoleTemplate = {
   version: number;
 };
 
-export type Agency = { id: string; name: string; slug: string };
+/** A reseller (Novate first) that white-labels Wally for its own clients. */
+export type Agency = {
+  id: string;
+  name: string;
+  slug: string;
+  /** Share of each client's price the agency keeps, 0 to 90. Set by the Wally team. */
+  marginPct: number;
+  supportEmail: string | null;
+  /** White-label: shown to the agency's clients instead of "Wally". */
+  branding: { brandName?: string; color?: string; logo?: string; poweredBy?: string };
+};
+
+export type AgencyInvite = { id: string; agencyId: string; email: string; invitedBy: string | null; createdAt: string };
 
 export type Tenant = {
   id: string;

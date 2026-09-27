@@ -1,4 +1,6 @@
 import type {
+  Agency,
+  AgencyInvite,
   Agent,
   AgentVersion,
   Approval,
@@ -30,6 +32,15 @@ export interface Store {
   getTenantBySlug(slug: string): Promise<Tenant | null>;
   createTenant(input: Pick<Tenant, "name" | "slug"> & Partial<Tenant>): Promise<Tenant>;
   updateTenant(id: string, patch: Partial<Tenant>): Promise<void>;
+
+  /** Agencies sit above businesses: RLS shows platform admins every agency and agency admins their own. */
+  listAgencies(): Promise<Agency[]>;
+  getAgency(id: string): Promise<Agency | null>;
+  createAgency(input: Pick<Agency, "name" | "slug">): Promise<Agency>;
+  updateAgency(id: string, patch: Partial<Omit<Agency, "id">>): Promise<void>;
+  listAgencyInvites(agencyId: string): Promise<AgencyInvite[]>;
+  addAgencyInvite(agencyId: string, email: string, invitedBy: string): Promise<void>;
+  deleteAgencyInvite(agencyId: string, id: string): Promise<void>;
 
   listTemplates(tenantId: string): Promise<RoleTemplate[]>;
 

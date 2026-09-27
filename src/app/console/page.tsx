@@ -2,14 +2,14 @@ import { tokenKey } from "@/lib/mcp";
 import { loadTeam } from "@/lib/teamData";
 import { computeRoi } from "@/lib/roi";
 import { headers } from "next/headers";
-import { isBillable } from "@/lib/billing";
+import { contractActiveOn, isBillable } from "@/lib/billing";
 import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
-import { Console, type ConsoleData } from "@/components/console/Console";
+import { Console, type AgencyView, type ConsoleData } from "@/components/console/Console";
 import { MODELS } from "@/lib/agent/models";
 import { monthStartIso } from "@/lib/agent/policy";
 import { N8N_EVENTS } from "@/lib/n8n";
 import { ROLE_LIBRARY } from "@/lib/roles";
-import { requireSession } from "@/lib/session";
+import { requireSession, systemStore } from "@/lib/session";
 import { getConfig, settingsStatus } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +28,37 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
   const { t } = await searchParams;
   const tenant = tenants.find((x) => x.slug === t) ?? tenants[0] ?? null;
 
+  // Agencies this person can see (all for the Wally team, their own for an
+  // agency admin), each with its clients and what they pay per month.
+  const today = new Date().toISOString().slice(0, 10);
+  const agencyList = await store.listAgencies();
+  const agencies: AgencyView[] = await Promise.all(
+    agencyList.map(async (a) => {
+      const clients = await Promise.all(
+        tenants
+          .filter((x) => x.agencyId === a.id)
+          .map(async (x) => {
+            const contracts = await store.listContracts(x.id);
+            const active = contracts.filter((c) => contractActiveOn(c, today));
+            const monthlyPrice = active.reduce((sum, c) => sum + c.monthlyFee, 0);
+            return { id: x.id, name: x.name, slug: x.slug, status: x.status, currency: active[0]?.currency ?? x.currency, monthlyPrice };
+          })
+      );
+      const invites = session.isPlatformAdmin ? await store.listAgencyInvites(a.id) : [];
+      return { ...a, clients, invites };
+    })
+  );
+
+  // White-label: everyone except the Wally team sees the agency's brand.
+  const brandAgency = session.isPlatformAdmin
+    ? null
+    : tenant?.agencyId
+      ? (agencyList.find((a) => a.id === tenant.agencyId) ?? (await systemStore().getAgency(tenant.agencyId)))
+      : (agencyList[0] ?? null);
+  const brand = brandAgency?.branding.brandName
+    ? { name: brandAgency.branding.brandName, color: brandAgency.branding.color ?? null, logo: brandAgency.branding.logo ?? null }
+    : null;
+
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host") ?? "localhost:3000"}`;
   const now = new Date().getTime();
@@ -38,6 +69,9 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     mode: session.mode,
     user: session.user,
     isPlatformAdmin: session.isPlatformAdmin,
+    agencyIds: session.agencyIds,
+    agencies,
+    brand,
     tenants: tenants.map((x) => ({ id: x.id, name: x.name, slug: x.slug, status: x.status })),
     roles: ROLE_LIBRARY,
     models: MODELS,

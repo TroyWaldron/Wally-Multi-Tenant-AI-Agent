@@ -28,7 +28,7 @@ import { logout } from "@/app/login/actions";
 import { WallyMark } from "@/components/WallyMark";
 import type { ModelInfo } from "@/lib/agent/models";
 import type { SettingStatus } from "@/lib/settings";
-import type { Agent, Approval, AuditEntry, Channel, Connector, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
+import type { Agency, AgencyInvite, Agent, Approval, AuditEntry, Channel, Connector, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
 import { ToastProvider } from "./ui";
 import { DashboardView } from "./views/Dashboard";
 import { AgentsView } from "./views/Agents";
@@ -46,6 +46,12 @@ import { RoadmapView } from "./views/Roadmap";
 import { SettingsView } from "./views/Settings";
 import { BillingView } from "./views/Billing";
 
+/** An agency with its client businesses and their monthly price (sum of active agreements). */
+export type AgencyView = Agency & {
+  clients: (Pick<Tenant, "id" | "name" | "slug" | "status" | "currency"> & { monthlyPrice: number })[];
+  invites: AgencyInvite[];
+};
+
 type Base = {
   /** Request time (ms), so every view agrees on "now". */
   now: number;
@@ -54,6 +60,11 @@ type Base = {
   mode: "demo" | "supabase";
   user: { id: string; email: string };
   isPlatformAdmin: boolean;
+  /** Agencies this person administers. */
+  agencyIds: string[];
+  agencies: AgencyView[];
+  /** White-label brand shown instead of Wally (agency admins and their clients). */
+  brand: { name: string; color: string | null; logo: string | null } | null;
   tenants: Pick<Tenant, "id" | "name" | "slug" | "status">[];
   roles: RoleTemplate[];
   models: ModelInfo[];
@@ -176,12 +187,24 @@ function Shell({ data }: { data: ConsoleData }) {
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-y-auto bg-ink-deep transition-transform duration-300 lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="border-b border-white/5 px-6 pb-5 pt-6">
-          <div className="flex items-center gap-2 text-lagoon">
-            <WallyMark className="h-7 w-7" />
-            <span className="font-heading text-xl font-bold text-white">
-              Wally<span className="text-amber">.</span>
-            </span>
-          </div>
+          {data.brand ? (
+            <div className="flex items-center gap-2">
+              {data.brand.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={data.brand.logo} alt="" className="h-7 w-7 rounded object-contain" />
+              ) : (
+                <span className="h-3 w-3 rounded-full" style={{ background: data.brand.color ?? "#1c7f7a" }} />
+              )}
+              <span className="truncate font-heading text-xl font-bold text-white">{data.brand.name}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-lagoon">
+              <WallyMark className="h-7 w-7" />
+              <span className="font-heading text-xl font-bold text-white">
+                Wally<span className="text-amber">.</span>
+              </span>
+            </div>
+          )}
           <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/35">AI staff console</div>
         </div>
 
@@ -240,7 +263,7 @@ function Shell({ data }: { data: ConsoleData }) {
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-xs font-bold text-ink-deep">{data.user.email.slice(0, 1).toUpperCase()}</div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-semibold text-white">{data.user.email}</div>
-            <div className="text-[10px] uppercase tracking-wide text-amber-light/70">{data.isPlatformAdmin ? "Platform admin" : "Member"}</div>
+            <div className="text-[10px] uppercase tracking-wide text-amber-light/70">{data.isPlatformAdmin ? "Platform admin" : data.agencyIds.length ? "Agency admin" : "Member"}</div>
           </div>
           <form action={logout}>
             <button className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">

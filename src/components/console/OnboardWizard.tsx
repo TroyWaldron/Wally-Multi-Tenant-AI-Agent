@@ -15,7 +15,7 @@ const TIMEZONES = ["America/Port_of_Spain", "America/Barbados", "America/Jamaica
  * Onboard a new business in four short steps. Only the name is required, so
  * "Finish" works from any step; everything else can be filled in later.
  */
-export function OnboardWizard({ roles }: { roles: RoleTemplate[] }) {
+export function OnboardWizard({ roles, agencies = [], direct = true }: { roles: RoleTemplate[]; agencies?: { id: string; name: string }[]; direct?: boolean }) {
   const router = useRouter();
   const { run, pending } = useAction();
   const [step, setStep] = useState(0);
@@ -29,6 +29,7 @@ export function OnboardWizard({ roles }: { roles: RoleTemplate[] }) {
     knowledge: "",
     knowledgeUrl: "",
     introPricing: true,
+    agencyId: direct ? null : (agencies[0]?.id ?? null),
   });
   const set = <K extends keyof OnboardInput>(k: K, v: OnboardInput[K]) => setF((x) => ({ ...x, [k]: v }));
   const prof = (k: keyof OnboardInput["profile"], v: string) => setF((x) => ({ ...x, profile: { ...x.profile, [k]: v } }));
@@ -58,6 +59,14 @@ export function OnboardWizard({ roles }: { roles: RoleTemplate[] }) {
       {step === 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Business name" htmlFor="ob-name"><input id="ob-name" className={inputClass} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Required" /></Field>
+          {(direct ? agencies.length > 0 : agencies.length > 1) && (
+            <Field label="Client of" htmlFor="ob-agency">
+              <select id="ob-agency" className={inputClass} value={f.agencyId ?? ""} onChange={(e) => set("agencyId", e.target.value || null)}>
+                {direct && <option value="">Wally directly</option>}
+                {agencies.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Industry" htmlFor="ob-ind"><input id="ob-ind" className={inputClass} value={f.industry} onChange={(e) => set("industry", e.target.value)} placeholder="Villa rentals, dental clinic…" /></Field>
           <Field label="Currency" htmlFor="ob-cur">
             <select id="ob-cur" className={inputClass} value={f.currency} onChange={(e) => set("currency", e.target.value)}>

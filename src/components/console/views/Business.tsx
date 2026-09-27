@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Building2, Download, Palette, Sparkles } from "lucide-react";
 import { exportBusinessData, loadStarterData, saveTenant } from "@/app/console/actions";
 import { OnboardWizard } from "../OnboardWizard";
+import { AgenciesSection } from "../Agencies";
 import type { Tenant } from "@/lib/types";
 import type { ConsoleData } from "../Console";
 import { Button, Card, Empty, Field, inputClass, Pill, SectionTitle, Table, useAction } from "../ui";
@@ -34,9 +35,9 @@ export function BusinessView({ data }: { data: ConsoleData }) {
 
       {data.tenant && <TenantEditor key={data.tenant.id} tenant={data.tenant} canExport={data.isPlatformAdmin} />}
 
-      {data.isPlatformAdmin && (
+      {(data.isPlatformAdmin || data.agencyIds.length > 0) && (
         <div>
-          <SectionTitle icon={Building2}>All businesses</SectionTitle>
+          <SectionTitle icon={Building2}>{data.isPlatformAdmin ? "All businesses" : "Your clients"}</SectionTitle>
           <Table
             minWidth={420}
             columns={["Business", "Status", ""]}
@@ -48,10 +49,16 @@ export function BusinessView({ data }: { data: ConsoleData }) {
             ])}
           />
           <div className="mt-4">
-            <OnboardWizard roles={data.roles} />
+            <OnboardWizard
+              roles={data.roles}
+              agencies={(data.isPlatformAdmin ? data.agencies : data.agencies.filter((a) => data.agencyIds.includes(a.id))).map((a) => ({ id: a.id, name: a.name }))}
+              direct={data.isPlatformAdmin}
+            />
           </div>
         </div>
       )}
+
+      <AgenciesSection data={data} />
     </div>
   );
 }

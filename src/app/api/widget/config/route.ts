@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
   if (!tenant) return NextResponse.json({ error: "Unknown widget key." }, { status: 404, headers: CORS_HEADERS });
   const agents = await store.listAgents(tenant.id);
   const agent = agents.find((a) => a.status === "live" && a.channels.includes("web"));
+  // White-label: a client of an agency shows the agency's name, not Wally.
+  const agency = tenant.agencyId ? await store.getAgency(tenant.agencyId) : null;
+  const brand = agency?.branding.poweredBy?.trim() || (agency?.branding.brandName ? `Powered by ${agency.branding.brandName}` : "Powered by Wally");
   return NextResponse.json(
     {
       business: tenant.name,
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
       welcome: tenant.branding.welcome ?? `Hi, how can ${tenant.name} help?`,
       position: tenant.branding.position ?? "right",
       voice: Boolean(await voiceKey(tenant.id)),
+      poweredBy: brand,
     },
     { headers: CORS_HEADERS }
   );

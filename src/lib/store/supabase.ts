@@ -4,6 +4,8 @@ import { ROLE_LIBRARY } from "@/lib/roles";
 import { serviceClient } from "@/lib/supabase";
 import { assertTenant, type Store } from "@/lib/store/types";
 import type {
+  Agency,
+  AgencyInvite,
   Agent,
   AgentVersion,
   Approval,
@@ -197,6 +199,25 @@ const template = (r: Row): RoleTemplate => ({
   version: r.version,
 });
 
+const agency = (r: Row): Agency => ({
+  id: r.id,
+  name: r.name,
+  slug: r.slug,
+  marginPct: Number(r.margin_pct ?? 0),
+  supportEmail: r.support_email ?? null,
+  branding: r.branding ?? {},
+});
+
+function agencyPatch(p: Partial<Agency>): Row {
+  const out: Row = {};
+  if (p.name !== undefined) out.name = p.name;
+  if (p.slug !== undefined) out.slug = p.slug;
+  if (p.marginPct !== undefined) out.margin_pct = p.marginPct;
+  if (p.supportEmail !== undefined) out.support_email = p.supportEmail;
+  if (p.branding !== undefined) out.branding = p.branding;
+  return out;
+}
+
 function tenantPatch(p: Partial<Tenant>): Row {
   const out: Row = {};
   if (p.name !== undefined) out.name = p.name;
@@ -243,6 +264,30 @@ export function supabaseStore(db: SupabaseClient): Store {
     },
     async updateTenant(id, patch) {
       must(await db.from("tenants").update(tenantPatch(patch)).eq("id", id));
+    },
+
+    async listAgencies() {
+      return must(await db.from("agencies").select("*").order("name")).map(agency);
+    },
+    async getAgency(id) {
+      const r = must(await db.from("agencies").select("*").eq("id", id).maybeSingle());
+      return r ? agency(r) : null;
+    },
+    async createAgency(input) {
+      return agency(must(await db.from("agencies").insert(agencyPatch(input)).select("*").single()));
+    },
+    async updateAgency(id, patch) {
+      must(await db.from("agencies").update(agencyPatch(patch)).eq("id", id));
+    },
+    async listAgencyInvites(agencyId) {
+      const rows = must(await db.from("agency_invites").select("*").eq("agency_id", agencyId).order("created_at"));
+      return rows.map((r: Row): AgencyInvite => ({ id: r.id, agencyId: r.agency_id, email: r.email, invitedBy: r.invited_by, createdAt: r.created_at }));
+    },
+    async addAgencyInvite(agencyId, email, invitedBy) {
+      must(await db.from("agency_invites").upsert({ agency_id: agencyId, email, invited_by: invitedBy }, { onConflict: "agency_id,email" }));
+    },
+    async deleteAgencyInvite(agencyId, id) {
+      must(await db.from("agency_invites").delete().eq("agency_id", agencyId).eq("id", id));
     },
 
     async listTemplates(tenantId) {
