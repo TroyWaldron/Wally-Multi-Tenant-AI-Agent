@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Building2, Palette, Plus, Sparkles } from "lucide-react";
-import { createTenant, loadStarterData, saveTenant } from "@/app/console/actions";
+import { Building2, Download, Palette, Sparkles } from "lucide-react";
+import { exportBusinessData, loadStarterData, saveTenant } from "@/app/console/actions";
+import { OnboardWizard } from "../OnboardWizard";
 import type { Tenant } from "@/lib/types";
 import type { ConsoleData } from "../Console";
 import { Button, Card, Empty, Field, inputClass, Pill, SectionTitle, Table, useAction } from "../ui";
@@ -11,7 +12,6 @@ import { Button, Card, Empty, Field, inputClass, Pill, SectionTitle, Table, useA
 export function BusinessView({ data }: { data: ConsoleData }) {
   const router = useRouter();
   const { run, pending } = useAction();
-  const [newName, setNewName] = useState("");
 
   return (
     <div className="flex flex-col gap-8">
@@ -32,7 +32,7 @@ export function BusinessView({ data }: { data: ConsoleData }) {
         </Empty>
       )}
 
-      {data.tenant && <TenantEditor key={data.tenant.id} tenant={data.tenant} />}
+      {data.tenant && <TenantEditor key={data.tenant.id} tenant={data.tenant} canExport={data.isPlatformAdmin} />}
 
       {data.isPlatformAdmin && (
         <div>
@@ -47,19 +47,16 @@ export function BusinessView({ data }: { data: ConsoleData }) {
               <Button key="o" size="sm" variant="ghost" onClick={() => router.push(`/console?t=${t.slug}`)}>Open</Button>,
             ])}
           />
-          <Card className="mt-4" title="Add a business">
-            <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); run(() => createTenant(newName), (r) => { setNewName(""); router.push(`/console?t=${r.data}`); }); }}>
-              <input id="new-tenant" className={`${inputClass} max-w-sm`} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Business name" />
-              <Button variant="accent" disabled={pending || !newName.trim()}><Plus className="h-4 w-4" /> Add</Button>
-            </form>
-          </Card>
+          <div className="mt-4">
+            <OnboardWizard roles={data.roles} />
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function TenantEditor({ tenant }: { tenant: Tenant }) {
+function TenantEditor({ tenant, canExport }: { tenant: Tenant; canExport: boolean }) {
   const { run, pending } = useAction();
   const [t, setT] = useState(tenant);
   const p = (k: keyof Tenant["profile"], v: string) => setT((x) => ({ ...x, profile: { ...x.profile, [k]: v } }));
@@ -130,7 +127,31 @@ function TenantEditor({ tenant }: { tenant: Tenant }) {
         </div>
       </Card>
 
-      <div className="lg:col-span-2"><Button variant="accent" disabled={pending}>{pending ? "Saving…" : "Save business"}</Button></div>
+      <div className="flex flex-wrap gap-2 lg:col-span-2">
+        <Button variant="accent" disabled={pending}>{pending ? "Saving…" : "Save business"}</Button>
+        {canExport && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() =>
+              run(
+                () => exportBusinessData(tenant.id),
+                (r) => {
+                  const url = URL.createObjectURL(new Blob([String(r.data)], { type: "application/json" }));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${tenant.slug}-wally-export-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }
+              )
+            }
+          >
+            <Download className="h-4 w-4" /> Export all data
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

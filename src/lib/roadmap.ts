@@ -53,7 +53,7 @@ export const FEATURES: Feature[] = [
   { area: "Outcomes", name: "Hybrid pricing engine and lease billing (Stripe / WiPay)", phase: "P4" },
   { area: "Marketplace", name: "Tenant-published templates, ratings, revenue share, persona packs", phase: "P4" },
   { area: "Business", name: "Agency tier for Novate (white-label, client onboarding)", phase: "P4" },
-  { area: "Business", name: "Onboarding wizard and data export on offboarding", phase: "P1" },
+  { area: "Business", name: "Onboarding wizard and data export on offboarding", phase: "P1", live: true },
   { area: "A2A", name: "A2A protocol, permissioned discovery, cross-tenant negotiation", phase: "P5" },
   { area: "A2A", name: "Inter-tenant audit trail and B2B commerce rail", phase: "P5" },
 ];

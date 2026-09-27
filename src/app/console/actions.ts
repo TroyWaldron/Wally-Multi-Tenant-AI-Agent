@@ -7,6 +7,7 @@ import { after } from "next/server";
 import { runScenarios } from "@/lib/scenarioRunner";
 import { runWorkflow, sendEvent, notify } from "@/lib/n8n";
 import { getRole } from "@/lib/roles";
+import { suggestedPlan } from "@/lib/billing";
 import { STARTER_AGENCY, STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
 import { getSession, systemStore } from "@/lib/session";
 import { SETTING_DEFS } from "@/lib/settings";
@@ -207,6 +208,99 @@ export async function createTenant(name: string) {
     const t = await session.store.createTenant({ name: name.trim(), slug });
     await session.store.audit(t.id, { actorType: "user", actor: session.user.email, action: "business.created", detail: { name } });
     return { ok: true, message: `${t.name} added.`, data: t.slug };
+  });
+}
+
+export type OnboardInput = {
+  name: string;
+  industry: string;
+  currency: string;
+  timezone: string;
+  profile: Tenant["profile"];
+  staff: { roleKey: string; name: string }[];
+  knowledge: string;
+  knowledgeUrl: string;
+  introPricing: boolean;
+};
+
+/**
+ * Onboarding in one step: the business, its first AI staff (as drafts to
+ * test before going live), its knowledge, and agreements at the
+ * introductory price for each role.
+ */
+export async function onboardBusiness(input: OnboardInput) {
+  return wrap(async () => {
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) return { ok: false, error: "Only platform admins can add a business." };
+    const name = input.name.trim();
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    if (!slug) return { ok: false, error: "Enter a business name." };
+    const { store } = session;
+    const t = await store.createTenant({ name, slug });
+    const frontName = input.staff.find((s) => getRole(s.roleKey)?.category === "Front desk")?.name;
+    await store.updateTenant(t.id, {
+      name,
+      industry: input.industry.trim() || null,
+      currency: input.currency,
+      timezone: input.timezone,
+      status: "trial",
+      profile: input.profile,
+      branding: { color: "#1c7f7a", position: "right", welcome: `Hi, I'm ${frontName ?? "the team's assistant"} at ${name}. How can I help?` },
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    for (const s of input.staff) {
+      const role = getRole(s.roleKey);
+      if (!role) continue;
+      const guestFacing = role.category === "Front desk" || role.category === "Revenue";
+      const agent = await store.saveAgent(t.id, {
+        templateKey: role.key,
+        name: s.name.trim() || role.name,
+        title: role.name,
+        avatar: null,
+        status: "draft",
+        model: "claude-opus-5",
+        fallbackModel: "claude-haiku-4-5",
+        effort: "medium",
+        instructions: "",
+        personality: role.defaultPersonality,
+        boundaries: role.defaultBoundaries,
+        channels: guestFacing ? ["playground", "web"] : ["playground", "ops"],
+        voice: {},
+        monthlyBudgetUsd: 25,
+      });
+      if (input.introPricing) {
+        await store.saveContract(t.id, { agentId: agent.id, ...suggestedPlan(role.key, role.name), startsOn: today, endsOn: null, status: "active", notes: "Introductory price, set at onboarding." });
+      }
+    }
+    if (input.knowledge.trim()) await store.addKnowledge(t.id, { title: `About ${name}`, content: input.knowledge.trim(), source: "console" });
+    if (input.knowledgeUrl.trim()) await systemStore().setSetting(t.id, "KNOWLEDGE_SYNC_URL", input.knowledgeUrl.trim(), false);
+    await store.audit(t.id, { actorType: "user", actor: session.user.email, action: "business.onboarded", detail: { name, staff: input.staff.map((s) => s.roleKey), introPricing: input.introPricing } });
+    return { ok: true, message: `${name} is set up. Test the new staff in the Playground, then set them live.`, data: t.slug };
+  });
+}
+
+/** Everything Wally holds for a business, as one JSON file (offboarding, data requests). */
+export async function exportBusinessData(tenantId: string) {
+  return wrap(async () => {
+    const { session, store, tenant, actor } = await ctx(tenantId);
+    if (!session.isPlatformAdmin) return { ok: false, error: "Only the Wally team can export a business's data." };
+    const [agents, knowledge, channels, contracts, approvals, outcomes, audit, conversations] = await Promise.all([
+      store.listAgents(tenant.id),
+      store.listKnowledge(tenant.id),
+      store.listChannels(tenant.id),
+      store.listContracts(tenant.id),
+      store.listApprovals(tenant.id),
+      store.listOutcomes(tenant.id, 10_000),
+      store.listAudit(tenant.id, 10_000),
+      store.listConversations(tenant.id, 10_000),
+    ]);
+    const withMessages = await Promise.all(conversations.map(async (c) => ({ ...c, messages: await store.listMessages(tenant.id, c.id) })));
+    await store.audit(tenant.id, { actorType: "user", actor, action: "business.exported", detail: { conversations: conversations.length } });
+    return {
+      ok: true,
+      message: "Export ready.",
+      data: JSON.stringify({ exportedAt: new Date().toISOString(), business: tenant, agents, knowledge, channels, contracts, approvals, outcomes, conversations: withMessages, audit }, null, 2),
+    };
   });
 }
 
