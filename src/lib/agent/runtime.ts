@@ -100,6 +100,26 @@ function describe(p: Personality) {
   ].join("; ");
 }
 
+/** Today's date where the business is, e.g. "Sunday, 27 September 2026". */
+function todayIn(timeZone: string) {
+  try {
+    return new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  } catch {
+    return new Date().toDateString();
+  }
+}
+
+/**
+ * Models lean on em and en dashes, which read as machine-written to guests.
+ * Swap them for plain punctuation: "1–3" becomes "1 to 3", other dashes a comma.
+ */
+export function humanize(text: string) {
+  return text
+    .replace(/(\d)\s*[\u2013\u2014]\s*(\d)/g, "$1 to $2")
+    .replace(/\s*[\u2013\u2014]\s*/g, ", ")
+    .replace(/,\s*([,.!?])/g, "$1");
+}
+
 export function buildSystemPrompt(tenant: Tenant, agent: Agent) {
   const role = getRole(agent.templateKey);
   const base = renderPrompt(role?.systemPrompt ?? "You are an AI assistant for {{tenant}}.", {
@@ -112,6 +132,8 @@ export function buildSystemPrompt(tenant: Tenant, agent: Agent) {
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
   return `${base}
+
+Today is ${todayIn(tenant.timezone)} (${tenant.timezone}).
 
 Your name is ${agent.name}${agent.title ? `, ${agent.title}` : ""}.
 Tone: ${describe(agent.personality)}.
@@ -302,7 +324,7 @@ export async function runAgent(args: {
       billedAs = info.id;
       inputTokens += r.inputTokens;
       outputTokens += r.outputTokens;
-      reply = r.reply;
+      reply = humanize(r.reply);
       break;
     } catch (err) {
       console.error(`Agent ${agent.name} on ${info.id} failed:`, err);

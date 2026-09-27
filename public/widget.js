@@ -27,6 +27,60 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (cfg) { if (cfg && cfg.agent) mount(cfg); });
 
+  // A small, safe subset of markdown for agent replies: **bold**, "- " and
+  // "1. " lists, and | tables |. Built with DOM nodes only, never innerHTML,
+  // so nothing in a reply can inject markup.
+  function inline(parent, text) {
+    var parts = text.split(/\*\*(.+?)\*\*/g);
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      parent.appendChild(i % 2 ? el("strong", {}, parts[i]) : document.createTextNode(parts[i]));
+    }
+    return parent;
+  }
+  function cells(line) {
+    return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
+  }
+  function rich(text) {
+    var frag = document.createDocumentFragment();
+    var lines = String(text || "").split(/\r?\n/);
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (/^\s*\|/.test(line)) {
+        var rows = [];
+        while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+        var table = el("table");
+        var head = true;
+        rows.forEach(function (r, n) {
+          if (/^\s*\|?[\s:|-]+\|?\s*$/.test(r)) return;
+          var tr = el("tr");
+          cells(r).forEach(function (c) { tr.appendChild(inline(el(n === 0 && head ? "th" : "td"), c)); });
+          table.appendChild(tr);
+        });
+        var wrap = el("div", { class: "tw" });
+        wrap.appendChild(table);
+        frag.appendChild(wrap);
+        continue;
+      }
+      var bullet = /^\s*(?:[-*\u2022]|\d+[.)])\s+/;
+      if (bullet.test(line)) {
+        var ordered = /^\s*\d/.test(line);
+        var list = el(ordered ? "ol" : "ul");
+        while (i < lines.length && bullet.test(lines[i])) { list.appendChild(inline(el("li"), lines[i].replace(bullet, ""))); i++; }
+        frag.appendChild(list);
+        continue;
+      }
+      var para = [];
+      while (i < lines.length && lines[i].trim() && !/^\s*\|/.test(lines[i]) && !bullet.test(lines[i])) { para.push(lines[i].replace(/^#+\s*/, "")); i++; }
+      var p = el("p");
+      para.forEach(function (t, n) { if (n) p.appendChild(el("br")); inline(p, t); });
+      frag.appendChild(p);
+    }
+    return frag;
+  }
+
   function mount(cfg) {
     var host = el("div", { id: "wally-widget" });
     document.body.appendChild(host);
@@ -45,7 +99,9 @@
       ".typing{font-size:12px;color:#6b7688;padding:0 14px 6px}" +
       "form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e7ee}input{flex:1;border:1px solid #d5dbe4;border-radius:999px;padding:10px 14px;font-size:14px;outline:none}input:focus{border-color:" + cfg.color + "}" +
       "button.send{border:0;border-radius:999px;background:" + cfg.color + ";color:#fff;padding:0 16px;font-weight:600;cursor:pointer}" +
-      ".foot{font-size:10px;color:#9aa3b2;text-align:center;padding-bottom:6px}";
+      ".foot{font-size:10px;color:#9aa3b2;text-align:center;padding-bottom:6px}" +
+      ".a{white-space:normal}.a p{margin:0 0 6px}.a p:last-child{margin-bottom:0}.a ul,.a ol{margin:0 0 6px;padding-left:18px}.a li{margin:2px 0}" +
+      ".tw{overflow-x:auto;margin:4px 0 6px}.a table{border-collapse:collapse;font-size:12.5px;min-width:100%}.a th,.a td{border-bottom:1px solid #e3e7ee;padding:5px 6px;text-align:left;vertical-align:top}.a th{background:#f3f5f8;font-weight:600;white-space:nowrap}";
     root.appendChild(style);
 
     var launch = el("button", { class: "launch", "aria-label": "Chat with " + cfg.agent.name }, "Chat with " + cfg.agent.name);
@@ -70,7 +126,9 @@
     root.appendChild(launch);
 
     function add(role, text) {
-      log.appendChild(el("div", { class: "m " + (role === "user" ? "u" : "a") }, text));
+      var bubble = el("div", { class: "m " + (role === "user" ? "u" : "a") }, role === "user" ? text : "");
+      if (role !== "user") bubble.appendChild(rich(text));
+      log.appendChild(bubble);
       log.scrollTop = log.scrollHeight;
     }
     add("assistant", cfg.welcome);

@@ -5,6 +5,7 @@ import { loadMessages, setConversationStatus, staffReply } from "@/app/console/a
 import type { Message } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { Button, cardClass, Empty, inputClass, Pill, timeAgo, useAction } from "../ui";
+import { RichText } from "./RichText";
 
 export function ConversationsView({ data }: { data: TenantData }) {
   const [filter, setFilter] = useState<"all" | "waiting_human" | "open" | "closed">("all");
@@ -92,7 +93,7 @@ function Transcript({ data, conversationId }: { data: TenantData; conversationId
         {messages?.map((m) => (
           <div key={m.id} className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm ${bubble[m.role] ?? bubble.tool}`}>
             {m.role === "staff" && <div className="mb-0.5 text-[10px] uppercase tracking-wide opacity-60">Team · {String(m.meta.by ?? "")}</div>}
-            {m.content}
+            {m.role === "assistant" ? <RichText text={m.content} /> : m.content}
             {m.meta.sample ? <div className="mt-0.5 text-[10px] opacity-50">sample</div> : null}
           </div>
         ))}

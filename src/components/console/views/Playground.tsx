@@ -6,6 +6,7 @@ import { RotateCcw, Send, ShieldCheck } from "lucide-react";
 import type { ToolEvent } from "@/lib/agent/runtime";
 import type { TenantData } from "../Console";
 import { Button, cardClass, inputClass, Pill, usd } from "../ui";
+import { RichText } from "./RichText";
 
 type Turn = { role: "user" | "assistant"; text: string; tools?: ToolEvent[]; model?: string | null; cost?: number; mode?: string };
 
@@ -103,7 +104,7 @@ export function PlaygroundView({ data, initialAgentId }: { data: TenantData; ini
                   </div>
                 </div>
               ))}
-              <div className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${t.role === "user" ? "bg-ink text-white" : "border border-ink/8 bg-white text-ink"}`}>{t.text}</div>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${t.role === "user" ? "whitespace-pre-wrap bg-ink text-white" : "border border-ink/8 bg-white text-ink"}`}>{t.role === "user" ? t.text : <RichText text={t.text} />}</div>
               {t.role === "assistant" && (
                 <div className="text-[10px] text-slate/45">
                   {t.mode === "demo" ? "Demo mode (no API key)" : t.model ? `${t.model} · ${usd(t.cost ?? 0)}` : t.mode}

@@ -31,13 +31,23 @@ export const STARTER_TENANT: Pick<Tenant, "name" | "slug"> & Partial<Tenant> = {
   },
 };
 
-const VILLAS = `Villas managed by Sunsational Tobago (rates in TT$ per night; seasonal rates and promotions may apply, always quote through the quote_price workflow when available):
-- Sugar Haven Villa 1 and Villa 2, Silver Palms, Bon Accord: 3 bedrooms each, private pool. Up to 8 guests TT$1,600, up to 10 guests TT$1,800.
-- Sugar Haven Villas (Both): 6 bedrooms. Up to 16 guests TT$3,200, up to 20 guests TT$3,600.
-- Twin Tides Villa Cove and Villa Coral, Silver Palms, Bon Accord: 4 ensuite bedrooms each; can be booked together as Twin Tides Villas (Both).
-- Tropicbird Townhouse, Forest Hills Villas, Mason Hall: flexible 1 to 3 bedrooms.
-- Villa Arizia, Alfred Crescent, Bon Accord: 4 bedrooms, 5 king beds.
-Booking a combined listing blocks the individual villas for those nights and vice versa.`;
+const VILLAS = `Villas managed by Sunsational Tobago, cheapest first. Nightly rates in TT$ (about US$ at 6.8 TT$ to 1 US$). Rates are confirmed at booking and can vary by season; Twin Tides and Villa Arizia have low, mid and peak season rates.
+
+| Villa | Area | Sleeps | From per night |
+| --- | --- | --- | --- |
+| Tropicbird Townhouse, 1 bedroom | Mason Hall | 2 | TT$800 (about US$118) |
+| Tropicbird Townhouse, 2 bedrooms | Mason Hall | 4 | TT$1,200 (about US$176) |
+| Tropicbird Townhouse, 3 bedrooms | Mason Hall | 6 | TT$1,600 (about US$235) |
+| Sugar Haven Villa 1 or Villa 2, 3 bedrooms, private pool | Bon Accord | 8 | TT$1,600 (about US$235); up to 10 guests TT$1,800 |
+| Tropicbird Townhouse, 3 bedrooms plus entertainment room | Mason Hall | 6 | TT$2,000 (about US$294) |
+| Twin Tides Villa Cove or Villa Coral, 4 ensuite bedrooms | Bon Accord | 8 | TT$2,200 low, TT$2,400 mid, TT$2,800 peak |
+| Villa Arizia, 4 bedrooms, 5 king beds | Bon Accord | 10 | TT$2,200 low, TT$2,400 mid, TT$2,800 peak |
+| Sugar Haven Villas (both villas), 6 bedrooms | Bon Accord | 16 | TT$3,200; up to 20 guests TT$3,600 |
+| Twin Tides Villas (both villas), 8 bedrooms | Bon Accord | 16 | TT$4,400 low, TT$4,800 mid, TT$5,600 peak |
+
+Extras: a queen blow-up mattress for 2 extra guests is TT$200 per night. Sugar Haven Villas and Tropicbird Townhouse allow events by arrangement; Twin Tides and Villa Arizia do not.
+Best value: Tropicbird Townhouse for couples and small groups; Sugar Haven Villa 1 or 2 for families (private pool, sleeps up to 10).
+Booking a combined listing blocks the individual villas for those nights and vice versa. Full live prices, including any current promotion, show on each villa's page at sunsationaltobago.com/villas.`;
 
 export const STARTER_KNOWLEDGE = [
   { title: "Our villas and base rates", content: VILLAS, source: "sunsationaltobago.com/villas" },
@@ -74,7 +84,7 @@ export const STARTER_AGENTS: AgentSeed[] = [
     status: "live",
     channels: ["playground", "web", "whatsapp"],
     instructions:
-      "Prices are in TT$; offer US$ only if the guest asks. For stays within 21 days of arrival, remind the guest that full payment is due up front. Hand anything about owner property management to the team as a lead.\n\nWorkflow inputs: check_availability needs {villa, check_in, check_out} with dates as YYYY-MM-DD. create_enquiry needs {name, email, phone, villa, check_in, check_out, guests}; get the guest's email first. Villa ids: sugar-haven-villa-1, sugar-haven-villa-2, sugar-haven-villas (both), twin-tides-cove, twin-tides-coral, twin-tides-villas (both), tropicbird-townhouse, villa-arizia.",
+      "When a guest asks about villas or prices, show a short table of the villas that fit their group, cheapest first, with TT$ and the rough US$ figure, and point out the best value. Keep it to the options that fit; skip the rest. Mention a current deal only if the knowledge or a tool gives you one; never invent discounts.\n\nAsk one thing at a time. For a quote you need dates, group size and the villa; ask for whichever is missing, one per message. Ask for name and email only when the guest is ready to enquire.\n\nPayment timing: work out the days from today to check-in. If check-in is within 21 days, full payment is due up front; otherwise a 50% deposit within 72 hours of confirmation, balance 21 days before arrival. Hand anything about owner property management to the team as a lead.\n\nWorkflow inputs: check_availability needs {villa, check_in, check_out} with dates as YYYY-MM-DD. create_enquiry needs {name, email, phone, villa, check_in, check_out, guests}; get the guest's email first. Villa ids: sugar-haven-villa-1, sugar-haven-villa-2, sugar-haven-villas (both), twin-tides-cove, twin-tides-coral, twin-tides-villas (both), tropicbird-townhouse, villa-arizia.",
   }),
   fromRole("accountant", {
     name: "Ledger",
