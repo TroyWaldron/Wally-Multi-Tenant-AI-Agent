@@ -8,13 +8,30 @@ export type SettingDef = {
   key: string;
   label: string;
   scope: "tenant" | "platform";
-  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "slack" | "roi";
+  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "slack" | "roi" | "calls";
   secret: boolean;
   help: string;
   placeholder?: string;
 };
 
 export const SETTING_DEFS: SettingDef[] = [
+  {
+    key: "CALL_CONSENT_NOTICE",
+    label: "What callers hear first",
+    scope: "tenant",
+    section: "calls",
+    secret: false,
+    help: "Said at the start of every call the AI answers. Leave blank for a notice that fits the business's country; where every party must agree to recording, the AI asks and hands over to a person if the caller says no.",
+  },
+  {
+    key: "TRANSCRIPT_RETENTION_DAYS",
+    label: "Keep call recordings and transcripts for (days)",
+    scope: "tenant",
+    section: "calls",
+    secret: false,
+    help: "After this, recordings and transcripts are deleted. Default 90.",
+    placeholder: "90",
+  },
   {
     key: "N8N_WEBHOOK_URL",
     label: "n8n webhook URL",

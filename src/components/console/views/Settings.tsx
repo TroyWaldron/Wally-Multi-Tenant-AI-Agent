@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BookOpen, Bot, HeartPulse, Hash, KeyRound, MessageCircle, Send, ShieldCheck, TrendingUp, Workflow, Zap } from "lucide-react";
+import { BookOpen, Bot, HeartPulse, Hash, KeyRound, MessageCircle, Phone, Send, ShieldCheck, TrendingUp, Workflow, Zap } from "lucide-react";
 import { clearSetting, runHealthCheck, saveSetting, testN8n } from "@/app/console/actions";
 import type { HealthItem } from "@/lib/health";
 import type { SettingStatus } from "@/lib/settings";
@@ -15,6 +15,7 @@ const SECTIONS: { id: SettingStatus["section"]; title: string; icon: typeof Bot;
   { id: "ai", title: "AI models (platform-wide)", icon: Bot, blurb: "Keys shared by every business on this Wally installation." },
   { id: "whatsapp", title: "WhatsApp Cloud API (platform-wide)", icon: MessageCircle, blurb: "One Meta app serves every client's number." },
   { id: "slack", title: "Slack (this business)", icon: Hash, blurb: "Guest handovers post to a Slack channel and a reply in the thread reaches the guest. The team can also DM the app to talk to the AI staff." },
+  { id: "calls", title: "Calls (this business)", icon: Phone, blurb: "Recording consent and how long call transcripts are kept, for when the AI staff answer calls." },
   { id: "roi", title: "Return on investment (this business)", icon: TrendingUp, blurb: "Assumptions behind the ROI figures the owner sees. Leave blank for the defaults." },
 ];
 
