@@ -9,7 +9,7 @@ import { Button, Card, cardClass, inputClass, SectionTitle, Table, useAction } f
 
 const SECTIONS: { id: SettingStatus["section"]; title: string; icon: typeof Bot; blurb: string }[] = [
   { id: "n8n", title: "n8n (this business)", icon: Workflow, blurb: "Where Wally sends events and runs workflows for this business." },
-  { id: "knowledge", title: "Knowledge (this business)", icon: BookOpen, blurb: "Keep agents' facts in step with the business's own website." },
+  { id: "knowledge", title: "Website (this business)", icon: BookOpen, blurb: "Connects Wally to the business's own website: its knowledge feed, and the secret its server uses to relay guest chats." },
   { id: "ai", title: "AI models (platform-wide)", icon: Bot, blurb: "Keys shared by every business on this Wally installation." },
   { id: "whatsapp", title: "WhatsApp Cloud API (platform-wide)", icon: MessageCircle, blurb: "One Meta app serves every client's number." },
 ];

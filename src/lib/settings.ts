@@ -42,6 +42,14 @@ export const SETTING_DEFS: SettingDef[] = [
     placeholder: "https://www.example.com/api/public/knowledge",
   },
   {
+    key: "WIDGET_RELAY_SECRET",
+    label: "Website relay secret",
+    scope: "tenant",
+    section: "knowledge",
+    secret: true,
+    help: "Only needed when the business's own website relays guest chats to Wally from its server (like the Sunsational concierge). With it, each guest gets their own message limit instead of the whole site sharing one.",
+  },
+  {
     key: "ANTHROPIC_API_KEY",
     label: "Anthropic API key",
     scope: "platform",
