@@ -76,6 +76,10 @@ export interface Store {
   addKnowledge(tenantId: string, d: Pick<KnowledgeDoc, "title" | "content" | "source">): Promise<KnowledgeDoc>;
   deleteKnowledge(tenantId: string, id: string): Promise<void>;
   searchKnowledge(tenantId: string, query: string, limit?: number): Promise<Pick<KnowledgeDoc, "id" | "title" | "content">[]>;
+  /** Semantic search: documents nearest to an embedding, best first. */
+  matchKnowledge(tenantId: string, embedding: number[], limit?: number): Promise<(Pick<KnowledgeDoc, "id" | "title" | "content"> & { similarity: number })[]>;
+  listUnembeddedKnowledge(tenantId: string, limit: number): Promise<Pick<KnowledgeDoc, "id" | "title" | "content">[]>;
+  setKnowledgeEmbedding(tenantId: string, id: string, embedding: number[]): Promise<void>;
 
   /** tenantId null = platform-wide settings. */
   getSettings(tenantId: string | null): Promise<SettingRow[]>;

@@ -16,6 +16,7 @@ export const FEATURES: Feature[] = [
   { area: "Isolation", name: "Row Level Security on every table (tenant_id / agency_id)", phase: "P0", live: true },
   { area: "Isolation", name: "Phantom tenant guard on every server query", phase: "P0", live: true },
   { area: "Isolation", name: "Per-tenant knowledge namespace (full-text now, pgvector column ready)", phase: "P0", live: true },
+  { area: "Knowledge", name: "PDF upload and semantic (vector) search per business", phase: "P2", live: true },
   { area: "Isolation", name: "Service role only on the server; users get RLS-scoped JWTs", phase: "P0", live: true },
   { area: "Isolation", name: "Cross-tenant leak check that fails the build", phase: "P0", live: true },
   { area: "Isolation", name: "One-button health check per business (channels, keys, workflows, agents)", phase: "P2", live: true },

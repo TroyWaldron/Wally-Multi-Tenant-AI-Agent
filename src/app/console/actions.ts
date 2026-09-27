@@ -16,6 +16,7 @@ import { helpdeskFromWally, isHelpdesk } from "@/lib/helpdesk";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
 import { decide } from "@/lib/approvals";
+import { embedPending, searchKnowledge } from "@/lib/embeddings";
 import { runHealthCheck as healthCheck } from "@/lib/health";
 import { listConnectorTools, tokenKey } from "@/lib/mcp";
 import type { Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
@@ -153,6 +154,7 @@ export async function addKnowledge(tenantId: string, title: string, content: str
     if (!title.trim() || !content.trim()) return { ok: false, error: "Add a title and some content." };
     await store.addKnowledge(tenant.id, { title: title.trim(), content: content.trim(), source: "console" });
     await store.audit(tenant.id, { actorType: "user", actor, action: "knowledge.added", detail: { title } });
+    after(() => embedPending(systemStore(), tenant).catch((err) => console.error("embedding failed", err)));
     return { ok: true, message: "Added to the knowledge base." };
   });
 }
@@ -176,7 +178,7 @@ export async function syncKnowledgeNow(tenantId: string) {
 
 export async function testKnowledgeSearch(tenantId: string, query: string) {
   const { store, tenant } = await ctx(tenantId);
-  return store.searchKnowledge(tenant.id, query);
+  return searchKnowledge(store, tenant, query);
 }
 
 /* ---------------------------------------------------------------- business */

@@ -7,6 +7,7 @@ import type { BetaMessageParam, BetaTool, BetaToolResultBlockParam, BetaToolUseB
 import { runChatCompletions } from "@/lib/agent/chatCompletions";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
+import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
 import { notify, runWorkflow } from "@/lib/n8n";
@@ -198,7 +199,7 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
 
   switch (block.name) {
     case "search_knowledge": {
-      const hits = await store.searchKnowledge(tenant.id, String(input.query ?? ""));
+      const hits = await searchKnowledge(store, tenant, String(input.query ?? ""));
       if (!hits.length) return ev("ran", "No matching knowledge found. Do not guess; offer to check with the team.");
       return ev("ran", hits.map((h) => `## ${h.title}\n${h.content}`).join("\n\n"));
     }

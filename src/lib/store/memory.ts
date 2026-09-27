@@ -133,6 +133,9 @@ function seed(): Db {
 }
 
 const g = globalThis as unknown as { __wallyDemoDb?: Db };
+// Knowledge embeddings for demo mode, keyed by document id.
+const embeddings = new Map<string, number[]>();
+
 function db(): Db {
   if (!g.__wallyDemoDb) g.__wallyDemoDb = seed();
   return g.__wallyDemoDb;
@@ -370,6 +373,27 @@ export const memoryStore: Store = {
   async deleteKnowledge(tenantId, id) {
     assertTenant(tenantId);
     db().knowledge = db().knowledge.filter((k) => !(k.tenantId === tenantId && k.id === id));
+  },
+  async matchKnowledge(tenantId, embedding, limit = 4) {
+    assertTenant(tenantId);
+    const cos = (a: number[], b: number[]) => {
+      let dot = 0, na = 0, nb = 0;
+      for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+      return na && nb ? dot / Math.sqrt(na * nb) : 0;
+    };
+    return db()
+      .knowledge.filter((k) => k.tenantId === tenantId && embeddings.has(k.id))
+      .map((k) => ({ id: k.id, title: k.title, content: k.content, similarity: cos(embeddings.get(k.id)!, embedding) }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+  },
+  async listUnembeddedKnowledge(tenantId, limit) {
+    assertTenant(tenantId);
+    return db().knowledge.filter((k) => k.tenantId === tenantId && !embeddings.has(k.id)).slice(0, limit);
+  },
+  async setKnowledgeEmbedding(tenantId, id, embedding) {
+    assertTenant(tenantId);
+    if (db().knowledge.some((k) => k.tenantId === tenantId && k.id === id)) embeddings.set(id, embedding);
   },
   async searchKnowledge(tenantId, query, limit = 4) {
     assertTenant(tenantId);

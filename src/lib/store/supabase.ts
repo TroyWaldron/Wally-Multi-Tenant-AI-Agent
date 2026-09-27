@@ -499,6 +499,20 @@ export function supabaseStore(db: SupabaseClient): Store {
       return rows.map((r) => ({ id: r.id, title: r.title, content: r.content }));
     },
 
+    async matchKnowledge(tenantId, embedding, limit = 4) {
+      assertTenant(tenantId);
+      const rows = must(await db.rpc("match_knowledge", { p_tenant: tenantId, p_embedding: JSON.stringify(embedding), p_limit: limit })) as Row[];
+      return rows.map((r) => ({ id: r.id, title: r.title, content: r.content, similarity: Number(r.similarity) }));
+    },
+    async listUnembeddedKnowledge(tenantId, limit) {
+      assertTenant(tenantId);
+      return must(await db.from("knowledge_docs").select("id,title,content").eq("tenant_id", tenantId).is("embedding", null).limit(limit)) as Row[] as { id: string; title: string; content: string }[];
+    },
+    async setKnowledgeEmbedding(tenantId, id, embedding) {
+      assertTenant(tenantId);
+      must(await db.from("knowledge_docs").update({ embedding: JSON.stringify(embedding) }).eq("tenant_id", tenantId).eq("id", id));
+    },
+
     // Settings hold secrets, so they always go through the service role.
     async getSettings(tenantId) {
       const q = serviceClient().from("settings").select("key,value,secret");

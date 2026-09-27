@@ -4,6 +4,8 @@
 // or on demand from the Knowledge screen. Imported articles are tagged with
 // the source "site-sync"; an article typed into the console with the same
 // title is replaced, so the site stays the single source of truth.
+import { after } from "next/server";
+import { embedPending } from "@/lib/embeddings";
 import { z } from "zod";
 import { SYNC_SOURCE } from "@/lib/knowledgeSource";
 import { systemStore } from "@/lib/session";
@@ -46,6 +48,7 @@ export async function syncKnowledge(tenant: Tenant): Promise<SyncResult> {
   for (const d of feed.docs) await store.addKnowledge(tenant.id, { title: d.title.trim(), content: d.content.trim(), source: SYNC_SOURCE });
 
   await store.setSetting(tenant.id, SYNCED_AT_KEY, new Date().toISOString(), false);
+  after(() => embedPending(store, tenant).catch((err) => console.error("embedding failed", err)));
   await store.audit(tenant.id, { actorType: "system", actor: "knowledge-sync", action: "knowledge.synced", detail: { url, imported: feed.docs.length, removed: stale.length } });
   return { ok: true, imported: feed.docs.length, removed: stale.length };
 }

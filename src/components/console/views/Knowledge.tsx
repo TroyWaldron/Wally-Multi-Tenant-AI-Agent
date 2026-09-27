@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { BookOpen, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { BookOpen, FileUp, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { addKnowledge, deleteKnowledge, syncKnowledgeNow, testKnowledgeSearch } from "@/app/console/actions";
 import { SYNC_SOURCE } from "@/lib/knowledgeSource";
 import type { TenantData } from "../Console";
@@ -28,7 +29,7 @@ export function KnowledgeView({ data }: { data: TenantData }) {
                 <button onClick={() => setOpen(open === k.id ? null : k.id)} className="text-left text-sm font-semibold text-ink hover:text-lagoon">{k.title}</button>
                 <button onClick={() => run(() => deleteKnowledge(data.tenant.id, k.id))} className="shrink-0 text-ink/30 hover:text-coral" aria-label={`Delete ${k.title}`}><Trash2 className="h-4 w-4" /></button>
               </div>
-              <div className="text-[11px] text-slate/45">{k.source === SYNC_SOURCE ? "From your website" : k.source}</div>
+              <div className="text-[11px] text-slate/45">{k.source === SYNC_SOURCE ? "From your website" : k.source.startsWith("pdf:") ? `From ${k.source.slice(4)}` : k.source}</div>
               {open === k.id && <p className="mt-2 whitespace-pre-wrap text-sm text-slate/75">{k.content}</p>}
             </div>
           ))}
@@ -48,6 +49,7 @@ export function KnowledgeView({ data }: { data: TenantData }) {
             <p className="text-sm text-slate/70">Add your website&apos;s knowledge feed in Settings and Wally will keep these articles up to date on its own.</p>
           )}
         </Card>
+        <PdfUpload tenantId={data.tenant.id} />
         <Card title="Add an article">
           <form
             className="flex flex-col gap-3"
@@ -73,8 +75,41 @@ export function KnowledgeView({ data }: { data: TenantData }) {
             </ol>
           )}
         </Card>
-        <p className="text-xs text-slate/50">Coming next: upload PDFs into this list, with semantic (vector) search per business.</p>
+        <p className="text-xs text-slate/50">With an OpenAI key set, search also matches by meaning, so &ldquo;can I bring my dog&rdquo; finds the pets policy.</p>
       </div>
     </div>
+  );
+}
+
+function PdfUpload({ tenantId }: { tenantId: string }) {
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const upload = async (file: File) => {
+    setBusy(true);
+    setNote("");
+    const fd = new FormData();
+    fd.append("tenantId", tenantId);
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/console/knowledge/upload", { method: "POST", body: fd });
+      const d = await res.json().catch(() => ({}));
+      setNote(res.ok ? `Added ${d.articles} article${d.articles === 1 ? "" : "s"} from ${file.name}${d.replaced ? `, replacing ${d.replaced} older ones` : ""}.` : d.error || "Upload failed.");
+      if (res.ok) router.refresh();
+    } catch {
+      setNote("Upload failed. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <Card title="Upload a PDF">
+      <p className="mb-3 text-sm text-slate/70">Price lists, house rules, a welcome book. The text becomes searchable articles; the file isn&apos;t stored.</p>
+      <input ref={input} id="kb-pdf" type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+      <Button variant="secondary" disabled={busy} onClick={() => input.current?.click()}><FileUp className="h-4 w-4" /> {busy ? "Reading…" : "Choose PDF"}</Button>
+      {note && <p className="mt-2 text-xs text-slate/65">{note}</p>}
+    </Card>
   );
 }
