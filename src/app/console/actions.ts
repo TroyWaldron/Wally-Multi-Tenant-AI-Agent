@@ -107,6 +107,8 @@ export async function staffReply(tenantId: string, conversationId: string, text:
     const conv = await store.getConversation(tenant.id, conversationId);
     if (!conv || !text.trim()) return { ok: false, error: "Write a reply first." };
     await store.addMessage(tenant.id, { conversationId, role: "staff", content: text.trim(), meta: { by: actor } });
+    // Replying takes the chat over, so the agent doesn't talk over the team.
+    if (conv.status === "open") await store.setConversationStatus(tenant.id, conversationId, "waiting_human");
     // n8n delivers it on the original channel (WhatsApp, email...).
     notify(tenant, "agent_replied", { conversationId, channel: conv.channel, contact: conv.contact, reply: text.trim(), agent: actor, fromStaff: true });
     return { ok: true, message: "Reply sent." };

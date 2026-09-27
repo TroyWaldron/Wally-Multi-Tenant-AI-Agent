@@ -97,6 +97,7 @@
       ".m{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}" +
       ".a{background:#fff;color:#1d2433;border:1px solid #e3e7ee;align-self:flex-start}.u{background:" + cfg.color + ";color:#fff;align-self:flex-end}" +
       ".typing{font-size:12px;color:#6b7688;padding:0 14px 6px}" +
+      ".who{font-size:10px;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin-bottom:2px}" +
       "form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e7ee}input{flex:1;border:1px solid #d5dbe4;border-radius:999px;padding:10px 14px;font-size:14px;outline:none}input:focus{border-color:" + cfg.color + "}" +
       "button.send{border:0;border-radius:999px;background:" + cfg.color + ";color:#fff;padding:0 16px;font-weight:600;cursor:pointer}" +
       ".foot{font-size:10px;color:#9aa3b2;text-align:center;padding-bottom:6px}" +
@@ -127,6 +128,7 @@
 
     function add(role, text) {
       var bubble = el("div", { class: "m " + (role === "user" ? "u" : "a") }, role === "user" ? text : "");
+      if (role === "staff") bubble.appendChild(el("div", { class: "who" }, "Team"));
       if (role !== "user") bubble.appendChild(rich(text));
       log.appendChild(bubble);
       log.scrollTop = log.scrollHeight;
@@ -135,7 +137,7 @@
 
     launch.addEventListener("click", function () {
       panel.hidden = !panel.hidden;
-      if (!panel.hidden) input.focus();
+      if (!panel.hidden) { input.focus(); check(); }
     });
 
     var busy = false;
@@ -157,6 +159,9 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.conversationId) try { localStorage.setItem(storageKey, d.conversationId); } catch (err) {}
+          lastSent = Date.now();
+          waiting = Boolean(d.waiting);
+          schedule();
           if (d.reply) add("assistant", d.reply);
           else if (d.waiting) add("assistant", "Thanks, a member of the team will reply here shortly.");
           else if (d.error) add("assistant", d.error);
@@ -164,5 +169,37 @@
         .catch(function () { add("assistant", "Sorry, the connection dropped. Please try again."); })
         .finally(function () { busy = false; typing.textContent = ""; });
     });
+
+    // Replies the team types in the console arrive here without the guest
+    // sending anything. Checks often while the team has the chat, slowly
+    // otherwise, only while the chat is open, and stops after a quiet spell.
+    var seenKey = "wally_seen_" + key;
+    var lastSent = Date.now();
+    var waiting = false;
+    var timer = null;
+    function schedule() {
+      clearTimeout(timer);
+      if (Date.now() - lastSent > 30 * 60 * 1000) return;
+      timer = setTimeout(check, waiting ? 5000 : 15000);
+    }
+    function check() {
+      var conv = null, seen = 0;
+      try { conv = localStorage.getItem(storageKey); seen = Number(localStorage.getItem(seenKey)) || 0; } catch (err) {}
+      if (!conv || panel.hidden || document.hidden) return schedule();
+      fetch(base + "/api/widget/messages?key=" + encodeURIComponent(key) + "&conversationId=" + encodeURIComponent(conv) + "&after=" + seen)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          waiting = Boolean(d.waiting);
+          (d.messages || []).forEach(function (m) {
+            add("staff", m.text);
+            seen = Math.max(seen, m.id);
+          });
+          try { localStorage.setItem(seenKey, String(seen)); } catch (err) {}
+        })
+        .catch(function () {})
+        .finally(schedule);
+    }
+    schedule();
   }
 })();

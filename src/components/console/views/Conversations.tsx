@@ -58,11 +58,15 @@ function Transcript({ data, conversationId }: { data: TenantData; conversationId
 
   useEffect(() => {
     let alive = true;
-    loadMessages(data.tenant.id, conversationId).then((m) => alive && setMessages(m));
+    const load = () => loadMessages(data.tenant.id, conversationId).then((m) => alive && setMessages(m));
+    load();
+    // While the team is handling a chat, keep the guest's new messages coming in.
+    const timer = conv.status === "waiting_human" ? setInterval(load, 5000) : undefined;
     return () => {
       alive = false;
+      clearInterval(timer);
     };
-  }, [data.tenant.id, conversationId, conv.updatedAt]);
+  }, [data.tenant.id, conversationId, conv.updatedAt, conv.status]);
 
   const bubble: Record<string, string> = {
     user: "self-start border border-ink/8 bg-white text-ink",
@@ -105,7 +109,7 @@ function Transcript({ data, conversationId }: { data: TenantData; conversationId
         }}
         className="flex gap-2 border-t border-ink/5 p-3"
       >
-        <input id="staff-reply" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply as the team (sent through n8n on the original channel)…" className={inputClass} />
+        <input id="staff-reply" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply as the team (website guests see it in their chat; other channels go through n8n)…" className={inputClass} />
         <Button disabled={pending || !reply.trim()}>Send</Button>
       </form>
     </div>
