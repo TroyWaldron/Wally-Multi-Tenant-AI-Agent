@@ -23,7 +23,7 @@ export const FEATURES: Feature[] = [
   { area: "Agents", name: "Scenario tests that re-run on every change", phase: "P1", live: true },
   { area: "Runtime", name: "Built-in tool-calling runtime on Claude", phase: "P0", live: true },
   { area: "Runtime", name: "OpenClaw runtime for long-running, self-hosted agents", phase: "P3" },
-  { area: "Runtime", name: "MCP tool connectors per tenant", phase: "P2" },
+  { area: "Runtime", name: "MCP tool connectors per tenant, with who-can-use and approval per tool", phase: "P2", live: true },
   { area: "LLM router", name: "Per-agent model, fallback model, effort, cost tracking", phase: "P0", live: true },
   { area: "LLM router", name: "DeepSeek adapter", phase: "P1", live: true },
   { area: "LLM router", name: "OpenAI GPT adapter", phase: "P1", live: true },

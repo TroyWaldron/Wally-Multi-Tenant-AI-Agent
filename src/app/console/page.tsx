@@ -1,3 +1,4 @@
+import { tokenKey } from "@/lib/mcp";
 import { loadTeam } from "@/lib/teamData";
 import { computeRoi } from "@/lib/roi";
 import { headers } from "next/headers";
@@ -9,7 +10,7 @@ import { monthStartIso } from "@/lib/agent/policy";
 import { N8N_EVENTS } from "@/lib/n8n";
 import { ROLE_LIBRARY } from "@/lib/roles";
 import { requireSession } from "@/lib/session";
-import { settingsStatus } from "@/lib/settings";
+import { getConfig, settingsStatus } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
 
   const monthStart = monthStartIso();
   const earliest = windowStart(now, monthStart);
-  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings, contracts, monthConversations, team, roi] = await Promise.all([
+  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings, contracts, monthConversations, team, roi, connectors] = await Promise.all([
     store.listAgents(tenant.id),
     store.listConversations(tenant.id, 150),
     store.listApprovals(tenant.id),
@@ -61,7 +62,9 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     store.listConversationsSince(tenant.id, monthStart),
     loadTeam(store, tenant.id),
     computeRoi(store, tenant),
+    store.listConnectors(tenant.id),
   ]);
+  const tokens = await Promise.all(connectors.map((c) => (c.auth === "bearer" ? getConfig(tenant.id, tokenKey(c.id)) : Promise.resolve(undefined))));
 
   const billableThisMonth: Record<string, number> = {};
   for (const c of monthConversations.filter(isBillable)) {
@@ -92,6 +95,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     billableThisMonth,
     team,
     roi,
+    connectors: connectors.map((c, i) => ({ ...c, hasToken: Boolean(tokens[i]) })),
   };
   return <Console data={data} />;
 }

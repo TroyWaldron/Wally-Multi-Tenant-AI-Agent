@@ -8,6 +8,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Connector,
   Contract,
   Conversation,
   KnowledgeDoc,
@@ -56,6 +57,19 @@ const agent = (r: Row): Agent => ({
   monthlyBudgetUsd: Number(r.monthly_budget_usd),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+});
+
+const connector = (r: Row): Connector => ({
+  id: r.id,
+  tenantId: r.tenant_id,
+  name: r.name,
+  url: r.url,
+  auth: r.auth,
+  agentIds: r.agent_ids ?? [],
+  allowedTools: r.allowed_tools ?? [],
+  approvalTools: r.approval_tools ?? [],
+  enabled: r.enabled,
+  createdAt: r.created_at,
 });
 
 const contract = (r: Row): Contract => ({
@@ -288,6 +302,21 @@ export function supabaseStore(db: SupabaseClient): Store {
     async findChannel(kind, externalId) {
       const r = must(await db.from("channels").select("*").eq("kind", kind).eq("external_id", externalId).eq("active", true).maybeSingle());
       return r ? channel(r) : null;
+    },
+
+    async listConnectors(tenantId) {
+      assertTenant(tenantId);
+      return must(await db.from("connectors").select("*").eq("tenant_id", tenantId).order("created_at")).map(connector);
+    },
+    async saveConnector(tenantId, c) {
+      assertTenant(tenantId);
+      const row = { tenant_id: tenantId, name: c.name, url: c.url, auth: c.auth, agent_ids: c.agentIds, allowed_tools: c.allowedTools, approval_tools: c.approvalTools, enabled: c.enabled };
+      if (c.id) return connector(must(await db.from("connectors").update(row).eq("tenant_id", tenantId).eq("id", c.id).select("*").single()));
+      return connector(must(await db.from("connectors").insert(row).select("*").single()));
+    },
+    async deleteConnector(tenantId, id) {
+      assertTenant(tenantId);
+      must(await db.from("connectors").delete().eq("tenant_id", tenantId).eq("id", id));
     },
 
     async listContracts(tenantId) {

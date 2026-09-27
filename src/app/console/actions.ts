@@ -15,7 +15,8 @@ import { sendStaffReply } from "@/lib/staffReply";
 import { helpdeskFromWally, isHelpdesk } from "@/lib/helpdesk";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
-import type { Agent, Channel, Contract, Tenant } from "@/lib/types";
+import { callConnectorTool, listConnectorTools, tokenKey } from "@/lib/mcp";
+import type { Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
@@ -125,6 +126,16 @@ export async function decideApproval(tenantId: string, approvalId: string, decis
     if (decision === "approved" && typeof a.payload.workflow === "string") {
       const r = await runWorkflow(tenant, a.payload.workflow, (a.payload.input as Record<string, unknown>) ?? {}, { approvalId, approvedBy: actor });
       note += r.ok ? ` (workflow ${a.payload.workflow} ran)` : ` (workflow ${a.payload.workflow} could not run: ${r.error ?? `HTTP ${r.status}`})`;
+    }
+    if (decision === "approved" && typeof a.payload.connectorId === "string" && typeof a.payload.tool === "string") {
+      const c = (await store.listConnectors(tenant.id)).find((x) => x.id === a.payload.connectorId);
+      try {
+        if (!c) throw new Error("connector removed");
+        const out = await callConnectorTool(c, a.payload.tool, (a.payload.arguments as Record<string, unknown>) ?? {});
+        note += ` (${c.name} did it: ${out.slice(0, 300)})`;
+      } catch (err) {
+        note += ` (${a.payload.tool} could not run: ${err instanceof Error ? err.message : "error"})`;
+      }
     }
     if (a.conversationId) await store.addMessage(tenant.id, { conversationId: a.conversationId, role: "system", content: note, meta: { approvalId } });
     notify(tenant, "approval_decided", { approval: a });
@@ -326,6 +337,50 @@ export async function saveChannel(tenantId: string, ch: Omit<Channel, "id" | "te
     await store.saveChannel(tenant.id, { ...ch, externalId: ch.externalId.trim() });
     await store.audit(tenant.id, { actorType: "user", actor, action: "channel.saved", detail: { kind: ch.kind, externalId: ch.externalId } });
     return { ok: true, message: "Channel saved." };
+  });
+}
+
+/* -------------------------------------------------------------- connectors */
+
+type ConnectorInput = Omit<Connector, "id" | "tenantId" | "createdAt"> & { id?: string; token?: string };
+
+export async function saveConnector(tenantId: string, input: ConnectorInput) {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    const { token, ...c } = input;
+    let url: URL;
+    try {
+      url = new URL(c.url.trim());
+    } catch {
+      return { ok: false, error: "Enter the connector's full URL, starting with https://" };
+    }
+    if (url.protocol !== "https:" && url.hostname !== "localhost") return { ok: false, error: "Connectors must use https://" };
+    if (!c.name.trim()) return { ok: false, error: "Give the connector a name." };
+    const saved = await store.saveConnector(tenant.id, { ...c, name: c.name.trim(), url: url.toString() });
+    // The token is a secret: it lives in settings, never on the connector row.
+    if (c.auth === "bearer" && token?.trim()) await systemStore().setSetting(tenant.id, tokenKey(saved.id), token.trim(), true);
+    await store.audit(tenant.id, { actorType: "user", actor, action: "connector.saved", detail: { name: saved.name, url: saved.url, agents: saved.agentIds.length } });
+    return { ok: true, message: "Connector saved.", data: saved.id };
+  });
+}
+
+export async function deleteConnector(tenantId: string, id: string) {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    await store.deleteConnector(tenant.id, id);
+    await systemStore().deleteSetting(tenant.id, tokenKey(id));
+    await store.audit(tenant.id, { actorType: "user", actor, action: "connector.deleted", detail: { id } });
+  });
+}
+
+/** Connects, lists the tools, and says which ones the AI staff will see. */
+export async function testConnector(tenantId: string, id: string) {
+  return wrap(async () => {
+    const { store, tenant } = await ctx(tenantId);
+    const c = (await store.listConnectors(tenant.id)).find((x) => x.id === id);
+    if (!c) return { ok: false, error: "Connector not found." };
+    const tools = await listConnectorTools(c, true);
+    return { ok: true, message: `Connected: ${tools.length} tool${tools.length === 1 ? "" : "s"}.`, data: tools.map((t) => ({ name: t.name, description: t.description ?? "", readOnly: Boolean(t.annotations?.readOnlyHint) })) };
   });
 }
 

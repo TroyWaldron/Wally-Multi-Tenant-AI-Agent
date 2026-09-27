@@ -12,6 +12,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Connector,
   Contract,
   Conversation,
   KnowledgeDoc,
@@ -27,6 +28,7 @@ type Db = {
   agents: Agent[];
   channels: Channel[];
   contracts: Contract[];
+  connectors: Connector[];
   conversations: Conversation[];
   messages: Message[];
   approvals: Approval[];
@@ -63,6 +65,7 @@ function seed(): Db {
     agents: [],
     channels: [],
     contracts: [],
+    connectors: [],
     conversations: [],
     messages: [],
     approvals: [],
@@ -222,6 +225,26 @@ export const memoryStore: Store = {
   async deleteChannel(tenantId, id) {
     assertTenant(tenantId);
     db().channels = db().channels.filter((c) => !(c.tenantId === tenantId && c.id === id));
+  },
+  async listConnectors(tenantId) {
+    assertTenant(tenantId);
+    return (db().connectors ??= []).filter((c) => c.tenantId === tenantId);
+  },
+  async saveConnector(tenantId, input) {
+    assertTenant(tenantId);
+    const list = (db().connectors ??= []);
+    const existing = input.id ? list.find((c) => c.tenantId === tenantId && c.id === input.id) : undefined;
+    if (existing) {
+      Object.assign(existing, input, { tenantId });
+      return existing;
+    }
+    const c: Connector = { ...input, id: randomUUID(), tenantId, createdAt: new Date().toISOString() };
+    list.push(c);
+    return c;
+  },
+  async deleteConnector(tenantId, id) {
+    assertTenant(tenantId);
+    db().connectors = (db().connectors ?? []).filter((c) => !(c.tenantId === tenantId && c.id === id));
   },
   async listContracts(tenantId) {
     assertTenant(tenantId);

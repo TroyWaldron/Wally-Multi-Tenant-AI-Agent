@@ -190,3 +190,20 @@ export type KnowledgeDoc = {
 };
 
 export type SettingRow = { key: string; value: string; secret: boolean };
+
+/** A business's own system reached over MCP (streamable HTTP). */
+export type Connector = {
+  id: string;
+  tenantId: string;
+  name: string;
+  url: string;
+  auth: "none" | "bearer" | "relay_secret";
+  /** AI staff allowed to use it; empty means none. */
+  agentIds: string[];
+  /** Tools the AI may see; empty means all the server offers. */
+  allowedTools: string[];
+  /** Tools that need a person's approval before they run. */
+  approvalTools: string[];
+  enabled: boolean;
+  createdAt: string;
+};

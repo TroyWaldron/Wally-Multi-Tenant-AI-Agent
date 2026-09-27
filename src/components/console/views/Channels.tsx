@@ -6,6 +6,7 @@ import { deleteChannel, saveChannel } from "@/app/console/actions";
 import type { Channel } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { Button, Card, Field, inputClass, Pill, SectionTitle, Table, useAction } from "../ui";
+import { ConnectorsSection } from "./Connectors";
 import { CopyBox } from "./CopyBox";
 
 const KINDS: { id: Channel["kind"]; label: string; hint: string }[] = [
@@ -83,6 +84,8 @@ export function ChannelsView({ data }: { data: TenantData }) {
           </form>
         </Card>
       </div>
+
+      <ConnectorsSection data={data} />
 
       <div>
         <SectionTitle icon={Webhook}>Endpoints for n8n and Meta</SectionTitle>

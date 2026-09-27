@@ -3,6 +3,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Connector,
   Contract,
   Conversation,
   KnowledgeDoc,
@@ -42,6 +43,9 @@ export interface Store {
   /** Global router lookup (not tenant-scoped by design): resolves which tenant owns an external id. */
   findChannel(kind: Channel["kind"], externalId: string): Promise<Channel | null>;
 
+  listConnectors(tenantId: string): Promise<Connector[]>;
+  saveConnector(tenantId: string, c: Omit<Connector, "id" | "tenantId" | "createdAt"> & { id?: string }): Promise<Connector>;
+  deleteConnector(tenantId: string, id: string): Promise<void>;
   listContracts(tenantId: string): Promise<Contract[]>;
   saveContract(tenantId: string, c: Omit<Contract, "id" | "tenantId" | "createdAt"> & { id?: string }): Promise<Contract>;
   deleteContract(tenantId: string, id: string): Promise<void>;

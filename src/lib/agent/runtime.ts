@@ -8,6 +8,7 @@ import { runChatCompletions } from "@/lib/agent/chatCompletions";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
+import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
 import { notify, runWorkflow } from "@/lib/n8n";
 import { getRole, renderPrompt } from "@/lib/roles";
 import { getConfig } from "@/lib/settings";
@@ -151,7 +152,7 @@ ${b.hours ? `- Working hours: ${b.hours}` : ""}
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
 
-export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation; dryRun?: boolean };
+export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation; dryRun?: boolean; connectorTools?: Map<string, ConnectorTool> };
 
 // In a scenario test (dryRun) these read and nothing else; every other tool
 // is simulated so a test never creates a lead, an approval or a handover.
@@ -161,6 +162,9 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
   const { store, tenant, agent, conversation } = ctx;
   const input = (block.input ?? {}) as Record<string, unknown>;
   const ev = (outcome: ToolEvent["outcome"], result: string): ToolEvent => ({ tool: block.name, input, outcome, result });
+
+  const ct = ctx.connectorTools?.get(block.name);
+  if (ct) return runConnectorTool(ct, input, ctx, ev);
 
   if (ctx.dryRun && block.name !== "search_knowledge" && !(block.name === "run_workflow" && READ_ONLY_WORKFLOWS.has(String(input.workflow)))) {
     const policy = evaluate(agent, block.name, input);
@@ -247,6 +251,33 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
   }
 }
 
+// A tool from one of the business's connectors. Only offered to agents the
+// connector lists; tools marked for approval go to the approval inbox and run
+// when a person approves them.
+async function runConnectorTool(ct: ConnectorTool, input: Record<string, unknown>, ctx: ToolContext, ev: (o: ToolEvent["outcome"], r: string) => ToolEvent) {
+  const { store, tenant, agent, conversation } = ctx;
+  if (ctx.dryRun && (ct.approval || !ct.readOnly)) return ev(ct.approval ? "sent_for_approval" : "ran", "(Test) Done.");
+  if (ct.approval) {
+    const a = await store.createApproval(tenant.id, {
+      agentId: agent.id,
+      conversationId: conversation.id,
+      kind: "action",
+      action: `${ct.connector.name}: ${ct.tool.name}`,
+      summary: `${agent.name} wants to use ${ct.tool.name} in ${ct.connector.name}.`,
+      payload: { connectorId: ct.connector.id, tool: ct.tool.name, arguments: input },
+    });
+    notify(tenant, "approval_requested", { approval: a });
+    await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "approval.requested", detail: { approvalId: a.id, connector: ct.connector.name, tool: ct.tool.name } });
+    return ev("sent_for_approval", "Sent to the team for approval. Say the team will confirm shortly.");
+  }
+  await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "tool.connector", detail: { connector: ct.connector.name, tool: ct.tool.name, input, conversationId: conversation.id } });
+  try {
+    return ev("ran", await callConnectorTool(ct.connector, ct.tool.name, input));
+  } catch (err) {
+    return ev("error", `${ct.connector.name} couldn't do that right now (${err instanceof Error ? err.message : "error"}). Offer to have the team follow up.`);
+  }
+}
+
 export function historyToMessages(history: { role: string; content: string }[]): BetaMessageParam[] {
   const out: BetaMessageParam[] = [];
   for (const m of history) {
@@ -321,9 +352,13 @@ export async function runAgent(args: {
 
   await syncKnowledgeIfStale(tenant);
   const system = buildSystemPrompt(tenant, agent);
-  const tools = TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name));
+  const connectorTools = await connectorToolsFor(store, tenant.id, agent);
+  const tools = [
+    ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
+    ...asModelTools(connectorTools),
+  ];
   const history = await store.listMessages(tenant.id, conversation.id);
-  const ctx = { store, tenant, agent, conversation, dryRun };
+  const ctx = { store, tenant, agent, conversation, dryRun, connectorTools };
 
   const toolEvents: ToolEvent[] = [];
   let inputTokens = 0;

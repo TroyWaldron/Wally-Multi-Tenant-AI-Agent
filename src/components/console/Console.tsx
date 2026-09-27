@@ -28,7 +28,7 @@ import { logout } from "@/app/login/actions";
 import { WallyMark } from "@/components/WallyMark";
 import type { ModelInfo } from "@/lib/agent/models";
 import type { SettingStatus } from "@/lib/settings";
-import type { Agent, Approval, AuditEntry, Channel, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
+import type { Agent, Approval, AuditEntry, Channel, Connector, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
 import { ToastProvider } from "./ui";
 import { DashboardView } from "./views/Dashboard";
 import { AgentsView } from "./views/Agents";
@@ -71,6 +71,7 @@ export type TenantData = Base & {
   usage: UsageEvent[];
   knowledge: KnowledgeDoc[];
   channels: Channel[];
+  connectors: (Connector & { hasToken: boolean })[];
   settings: SettingStatus[];
   monthStart: string;
   contracts: Contract[];
