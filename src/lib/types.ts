@@ -19,6 +19,8 @@ export type Boundaries = {
   /** Plain-language "cannot do" list, written into the system prompt. */
   cannot: string[];
   hours?: string;
+  /** Business events (see lib/events.ts) this agent works on when they happen. */
+  reactsTo?: string[];
 };
 
 export type RoleTemplate = {

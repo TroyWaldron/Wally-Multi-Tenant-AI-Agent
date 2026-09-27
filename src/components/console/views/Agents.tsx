@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, FlaskConical, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { deleteAgent, hireAgent, runAgentTests, saveAgent } from "@/app/console/actions";
+import { BUSINESS_EVENTS } from "@/lib/businessEvents";
 import type { Agent, Personality } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { OrgChart } from "../OrgChart";
@@ -307,6 +308,24 @@ function AgentEditor({ agent, data, onClose }: { agent: Agent; data: TenantData;
           </Field>
           <Field label="Never does" hint="Plain-language limits, written into its instructions.">
             <ChipList id="ag-cannot" values={a.boundaries.cannot} onChange={(v) => setB("cannot", v)} placeholder="e.g. Promise refunds" />
+          </Field>
+          <Field label="Reacts to" hint="When one of these happens in your system, this agent works on it and tells the team in Slack.">
+            <div className="flex flex-wrap gap-2">
+              {BUSINESS_EVENTS.map((e) => {
+                const on = a.boundaries.reactsTo?.includes(e.event) ?? false;
+                return (
+                  <button
+                    key={e.event}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setB("reactsTo", on ? (a.boundaries.reactsTo ?? []).filter((x) => x !== e.event) : [...(a.boundaries.reactsTo ?? []), e.event])}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium ${on ? "border-lagoon bg-lagoon/10 text-lagoon-deep" : "border-ink/15 text-ink/70"}`}
+                  >
+                    {e.label}
+                  </button>
+                );
+              })}
+            </div>
           </Field>
           <Field label="Working hours" htmlFor="ag-hours"><input id="ag-hours" className={inputClass} value={a.boundaries.hours ?? ""} onChange={(e) => setB("hours", e.target.value)} placeholder="24/7" /></Field>
 

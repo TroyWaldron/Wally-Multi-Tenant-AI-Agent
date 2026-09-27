@@ -1,12 +1,13 @@
 // Inbound from n8n. n8n authenticates with the business's slug and shared
 // secret (Settings -> n8n), then asks Wally to do one of:
 //   { action: "message", channel, contact, text, agentId? }  -> runs the agent, returns its reply
-//   { action: "event", event, data }                        -> logs an event from another system (e.g. Sunsational booking_created)
+//   { action: "event", event, data }                        -> an event from another system (e.g. booking_created); AI staff who react to it get to work
 //   { action: "approval", approvalAction, summary, payload } -> puts something in the approval inbox
 //   { action: "staff_reply", conversationId, text }          -> records a human reply (e.g. staff answered on WhatsApp)
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { handleInbound, InboundError } from "@/lib/agent/inbound";
+import { reactToEvent, receiveEvent } from "@/lib/events";
 import { notify } from "@/lib/n8n";
 import { safeEqual } from "@/lib/secrets";
 import { systemStore } from "@/lib/session";
@@ -19,15 +20,6 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approval"), approvalAction: z.string(), summary: z.string(), payload: z.record(z.string(), z.unknown()).default({}) }),
   z.object({ action: z.literal("staff_reply"), conversationId: z.string(), text: z.string(), staffName: z.string().optional() }),
 ]);
-
-// Events from other systems that count as business outcomes.
-const OUTCOME_EVENTS: Record<string, string> = {
-  booking_created: "booking_enquiry",
-  booking_approved: "booking",
-  payment_recorded: "payment",
-  lead_created: "lead",
-  maintenance_ticket_created: "ticket_opened",
-};
 
 export async function POST(req: NextRequest) {
   const slug = req.headers.get("x-wally-tenant") ?? "";
@@ -50,13 +42,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
       }
       case "event": {
-        await store.audit(tenant.id, { actorType: "n8n", actor: "n8n", action: `event.${body.event}`, detail: body.data });
-        const kind = OUTCOME_EVENTS[body.event];
-        if (kind) {
-          const value = Number(body.data.total ?? body.data.amount ?? 0) || 0;
-          await store.recordOutcome(tenant.id, { agentId: null, kind, value, note: `From ${body.event}` });
-        }
-        return NextResponse.json({ ok: true, recordedOutcome: kind ?? null });
+        const { outcome, agents } = await receiveEvent(store, tenant, body.event, body.data, "n8n");
+        if (agents.length) after(() => reactToEvent(store, tenant, body.event, body.data, agents.map((a) => a.id)));
+        return NextResponse.json({ ok: true, recordedOutcome: outcome, reactingAgents: agents.map((a) => a.name) });
       }
       case "approval": {
         const a = await store.createApproval(tenant.id, { agentId: null, conversationId: null, kind: "action", action: body.approvalAction, summary: body.summary, payload: body.payload });
