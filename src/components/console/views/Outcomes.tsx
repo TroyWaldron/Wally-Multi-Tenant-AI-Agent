@@ -21,8 +21,36 @@ export function OutcomesView({ data }: { data: TenantData }) {
   const tokens = month.reduce((s, u) => s + u.inputTokens + u.outputTokens, 0);
   const maxCount = Math.max(1, ...byKind.map(([, v]) => v.count));
 
+  const r = data.roi;
   return (
     <div className="flex flex-col gap-8">
+      <div>
+        <SectionTitle icon={TrendingUp}>Return on investment, last {r.days} days</SectionTitle>
+        <div className={`${cardClass} p-5`}>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <div className="font-heading text-3xl font-bold text-ink">{r.multiple === null ? "Not priced" : `${r.multiple}x`}</div>
+              <div className="text-xs text-slate/60">{r.multiple === null ? "Add an agreement under Pricing & Billing" : `back for every ${money(1, r.currency).replace(/\.00$/, "")} spent`}</div>
+            </div>
+            <div>
+              <div className="font-heading text-2xl font-bold text-ink">{r.hoursSaved} h</div>
+              <div className="text-xs text-slate/60">staff time saved ({r.handledAlone} chats handled alone)</div>
+            </div>
+            <div>
+              <div className="font-heading text-2xl font-bold text-ink">{money(r.staffCostSaved + r.outcomeValue, r.currency)}</div>
+              <div className="text-xs text-slate/60">value: {money(r.staffCostSaved, r.currency)} staff time{r.outcomeValue ? ` + ${money(r.outcomeValue, r.currency)} outcomes` : ""}</div>
+            </div>
+            <div>
+              <div className="font-heading text-2xl font-bold text-ink">{money(r.cost, r.currency)}</div>
+              <div className="text-xs text-slate/60">monthly price (US${r.costUsd}) · {r.afterHours} chats after hours</div>
+            </div>
+          </div>
+          <p className="mt-4 text-[11px] text-slate/50">
+            Worked out at {r.assumptions.minutesPerChat} minutes of staff time per chat, {money(r.assumptions.hourlyCost, r.currency)} an hour and {r.assumptions.fxPerUsd} {r.currency} per US$1. Change these under Settings.
+          </p>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Target} label="Outcomes (30d)" value={recent.length} />
         <MetricCard icon={TrendingUp} label="Outcome value (30d)" value={money(value, data.tenant.currency)} />

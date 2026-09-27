@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BookOpen, Bot, KeyRound, MessageCircle, Send, ShieldCheck, Workflow, Zap } from "lucide-react";
+import { BookOpen, Bot, KeyRound, MessageCircle, Send, ShieldCheck, TrendingUp, Workflow, Zap } from "lucide-react";
 import { clearSetting, saveSetting, testN8n } from "@/app/console/actions";
 import type { SettingStatus } from "@/lib/settings";
 import type { TenantData } from "../Console";
@@ -12,6 +12,7 @@ const SECTIONS: { id: SettingStatus["section"]; title: string; icon: typeof Bot;
   { id: "knowledge", title: "Website (this business)", icon: BookOpen, blurb: "Connects Wally to the business's own website: its knowledge feed, and the secret its server uses to relay guest chats." },
   { id: "ai", title: "AI models (platform-wide)", icon: Bot, blurb: "Keys shared by every business on this Wally installation." },
   { id: "whatsapp", title: "WhatsApp Cloud API (platform-wide)", icon: MessageCircle, blurb: "One Meta app serves every client's number." },
+  { id: "roi", title: "Return on investment (this business)", icon: TrendingUp, blurb: "Assumptions behind the ROI figures the owner sees. Leave blank for the defaults." },
 ];
 
 export function SettingsView({ data }: { data: TenantData }) {

@@ -8,7 +8,7 @@ export type SettingDef = {
   key: string;
   label: string;
   scope: "tenant" | "platform";
-  section: "n8n" | "knowledge" | "ai" | "whatsapp";
+  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "roi";
   secret: boolean;
   help: string;
   placeholder?: string;
@@ -97,6 +97,33 @@ export const SETTING_DEFS: SettingDef[] = [
     section: "whatsapp",
     secret: true,
     help: "Used to verify Meta's X-Hub-Signature-256 on incoming WhatsApp webhooks.",
+  },
+  {
+    key: "ROI_MINUTES_PER_CHAT",
+    label: "Staff minutes per chat",
+    scope: "tenant",
+    section: "roi",
+    secret: false,
+    help: "How long a person would spend on one guest chat. Used for hours saved. Default 6.",
+    placeholder: "6",
+  },
+  {
+    key: "ROI_HOURLY_COST",
+    label: "Staff cost per hour (business currency)",
+    scope: "tenant",
+    section: "roi",
+    secret: false,
+    help: "What an hour of front-desk staff time costs the business, in its own currency. Default 50.",
+    placeholder: "50",
+  },
+  {
+    key: "ROI_FX_PER_USD",
+    label: "Business currency per US$1",
+    scope: "tenant",
+    section: "roi",
+    secret: false,
+    help: "Converts the US$ price into the business's currency for the ROI figures. Default 6.8 (TT$).",
+    placeholder: "6.8",
   },
 ];
 

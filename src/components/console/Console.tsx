@@ -1,6 +1,7 @@
 "use client";
 
 import type { TeamMember } from "@/lib/team";
+import type { Roi } from "@/lib/roi";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -77,6 +78,8 @@ export type TenantData = Base & {
   billableThisMonth: Record<string, number>;
   /** The AI team with reporting lines and live health (org chart, dashboard). */
   team: TeamMember[];
+  /** Last 30 days of value from guest-facing AI staff against their price. */
+  roi: Roi;
 };
 
 export type ConsoleData = (Base & { tenant: null }) | TenantData;

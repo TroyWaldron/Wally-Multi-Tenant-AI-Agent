@@ -1,4 +1,5 @@
 import { loadTeam } from "@/lib/teamData";
+import { computeRoi } from "@/lib/roi";
 import { headers } from "next/headers";
 import { isBillable } from "@/lib/billing";
 import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
@@ -46,7 +47,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
 
   const monthStart = monthStartIso();
   const earliest = windowStart(now, monthStart);
-  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings, contracts, monthConversations, team] = await Promise.all([
+  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings, contracts, monthConversations, team, roi] = await Promise.all([
     store.listAgents(tenant.id),
     store.listConversations(tenant.id, 150),
     store.listApprovals(tenant.id),
@@ -59,6 +60,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     store.listContracts(tenant.id),
     store.listConversationsSince(tenant.id, monthStart),
     loadTeam(store, tenant.id),
+    computeRoi(store, tenant),
   ]);
 
   const billableThisMonth: Record<string, number> = {};
@@ -89,6 +91,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     contracts,
     billableThisMonth,
     team,
+    roi,
   };
   return <Console data={data} />;
 }

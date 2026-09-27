@@ -48,7 +48,7 @@ export const FEATURES: Feature[] = [
   { area: "Personality", name: "Tone sliders per agent", phase: "P0", live: true },
   { area: "Personality", name: "Persona library with versions and A/B tests", phase: "P3" },
   { area: "Outcomes", name: "Outcome events and per-agent spend", phase: "P0", live: true },
-  { area: "Outcomes", name: "ROI dashboard for business owners", phase: "P2" },
+  { area: "Outcomes", name: "ROI dashboard for business owners", phase: "P2", live: true },
   { area: "Outcomes", name: "Voice-minute metering", phase: "P3" },
   { area: "Outcomes", name: "Hybrid pricing engine and lease billing (Stripe / WiPay)", phase: "P4" },
   { area: "Marketplace", name: "Tenant-published templates, ratings, revenue share, persona packs", phase: "P4" },
