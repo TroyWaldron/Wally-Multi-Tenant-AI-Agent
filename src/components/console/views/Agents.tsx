@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
-import { deleteAgent, hireAgent, saveAgent } from "@/app/console/actions";
+import { Bot, FlaskConical, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { deleteAgent, hireAgent, runAgentTests, saveAgent } from "@/app/console/actions";
 import type { Agent, Personality } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { OrgChart } from "../OrgChart";
@@ -113,6 +113,7 @@ export function AgentsView({ data, onTest }: { data: TenantData; onTest: (id: st
                   <div className={`h-full rounded-full ${pct >= 80 ? "bg-coral" : "bg-lagoon"}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
+              <ScenarioStatus data={data} agentId={a.id} />
               <div className="mt-auto flex gap-2">
                 <Button size="sm" variant="secondary" onClick={() => setEditing(a.id)}>
                   <SlidersHorizontal className="h-3.5 w-3.5" /> Configure
@@ -127,6 +128,53 @@ export function AgentsView({ data, onTest }: { data: TenantData; onTest: (id: st
       </div>
 
       {agent && <AgentEditor key={agent.id} agent={agent} data={data} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+type ScenarioDetail = {
+  agentId: string;
+  passed: number;
+  total: number;
+  ranAt: string;
+  trigger: string;
+  results: { id: string; name: string; pass: boolean; failed: string[]; reply: string }[];
+};
+
+/** The agent's latest scenario test run, with a button to run them again. */
+function ScenarioStatus({ data, agentId }: { data: TenantData; agentId: string }) {
+  const { run, pending } = useAction();
+  const [open, setOpen] = useState(false);
+  const last = data.audit.find((e) => e.action === "scenario.run" && (e.detail as ScenarioDetail).agentId === agentId)?.detail as ScenarioDetail | undefined;
+  const allPass = last && last.total > 0 && last.passed === last.total;
+  return (
+    <div className="rounded-xl bg-paper px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-left" disabled={!last}>
+          <FlaskConical className={`h-3.5 w-3.5 ${!last ? "text-slate/40" : allPass ? "text-leaf" : "text-coral"}`} />
+          {last ? (
+            <span>
+              <span className="font-semibold text-ink">{last.passed} of {last.total} tests pass</span>
+              <span className="text-slate/55"> · {new Date(last.ranAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+            </span>
+          ) : (
+            <span className="text-slate/55">No scenario tests run yet</span>
+          )}
+        </button>
+        <button type="button" disabled={pending} onClick={() => run(() => runAgentTests(data.tenant.id, agentId))} className="font-semibold text-lagoon hover:underline disabled:opacity-50">
+          {pending ? "Running…" : "Run tests"}
+        </button>
+      </div>
+      {open && last && (
+        <ul className="mt-2 space-y-1.5 border-t border-ink/8 pt-2">
+          {last.results.map((r) => (
+            <li key={r.id}>
+              <span className={r.pass ? "text-leaf" : "text-coral"}>{r.pass ? "Pass" : "Fail"}</span> <span className="text-ink">{r.name}</span>
+              {!r.pass && <div className="text-slate/60">Missed: {r.failed.join(", ")}. Replied: “{r.reply.slice(0, 160)}”</div>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

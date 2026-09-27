@@ -151,12 +151,25 @@ ${b.hours ? `- Working hours: ${b.hours}` : ""}
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
 
-export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation };
+export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation; dryRun?: boolean };
+
+// In a scenario test (dryRun) these read and nothing else; every other tool
+// is simulated so a test never creates a lead, an approval or a handover.
+const READ_ONLY_WORKFLOWS = new Set(["check_availability", "quote_price", "list_payments", "list_bookings", "check_calendar"]);
 
 export async function executeTool(block: { name: string; input: unknown }, ctx: ToolContext): Promise<ToolEvent> {
   const { store, tenant, agent, conversation } = ctx;
   const input = (block.input ?? {}) as Record<string, unknown>;
   const ev = (outcome: ToolEvent["outcome"], result: string): ToolEvent => ({ tool: block.name, input, outcome, result });
+
+  if (ctx.dryRun && block.name !== "search_knowledge" && !(block.name === "run_workflow" && READ_ONLY_WORKFLOWS.has(String(input.workflow)))) {
+    const policy = evaluate(agent, block.name, input);
+    if (policy.decision === "deny") return ev("denied", `Not allowed: ${policy.reason} Ask for approval or escalate instead.`);
+    if (policy.decision === "approval" || block.name === "request_approval")
+      return ev("sent_for_approval", "(Test) Sent to the team. Tell the customer someone will confirm shortly.");
+    if (block.name === "escalate_to_human") return ev("ran", "(Test) A team member has been alerted and will take over. Let the customer know.");
+    return ev("ran", "(Test) Done.");
+  }
 
   const policy = evaluate(agent, block.name, input);
   if (policy.decision === "deny") {
@@ -261,12 +274,14 @@ export async function runAgent(args: {
   agent: Agent;
   conversation: Conversation;
   text: string;
+  /** Scenario tests: no side effects and no n8n notifications. */
+  dryRun?: boolean;
 }): Promise<AgentRun> {
-  const { store, tenant, agent, conversation, text } = args;
+  const { store, tenant, agent, conversation, text, dryRun } = args;
   const empty = { toolEvents: [], model: null, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
   await store.addMessage(tenant.id, { conversationId: conversation.id, role: "user", content: text });
-  notify(tenant, "message_received", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, text });
+  if (!dryRun) notify(tenant, "message_received", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, text });
 
   const finish = async (run: AgentRun) => {
     await store.addMessage(tenant.id, {
@@ -275,7 +290,7 @@ export async function runAgent(args: {
       content: run.reply,
       meta: { toolEvents: run.toolEvents, model: run.model, mode: run.mode, costUsd: run.costUsd },
     });
-    notify(tenant, "agent_replied", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, reply: run.reply, agent: agent.name });
+    if (!dryRun) notify(tenant, "agent_replied", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, reply: run.reply, agent: agent.name });
     return run;
   };
 
@@ -308,7 +323,7 @@ export async function runAgent(args: {
   const system = buildSystemPrompt(tenant, agent);
   const tools = TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name));
   const history = await store.listMessages(tenant.id, conversation.id);
-  const ctx = { store, tenant, agent, conversation };
+  const ctx = { store, tenant, agent, conversation, dryRun };
 
   const toolEvents: ToolEvent[] = [];
   let inputTokens = 0;

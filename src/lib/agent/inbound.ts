@@ -3,6 +3,7 @@
 // tenant (widget key, WhatsApp phone_number_id, n8n secret, signed-in user).
 import { runAgent } from "@/lib/agent/runtime";
 import { notify } from "@/lib/n8n";
+import { redactPII } from "@/lib/pii";
 import type { Store } from "@/lib/store/types";
 import type { Conversation, Tenant } from "@/lib/types";
 
@@ -24,7 +25,8 @@ export async function handleInbound(args: {
   allowDraft?: boolean;
 }) {
   const { store, tenant, channel } = args;
-  const text = args.text.trim().slice(0, 4000);
+  // Card, bank and ID numbers never reach storage or a model provider.
+  const text = redactPII(args.text.trim().slice(0, 4000)).text;
   if (!text) throw new InboundError("Message is empty.");
 
   let conversation = args.conversationId ? await store.getConversation(tenant.id, args.conversationId) : null;

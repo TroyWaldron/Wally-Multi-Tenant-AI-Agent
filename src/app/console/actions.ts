@@ -3,6 +3,8 @@
 // Console mutations. Each one re-checks the session and uses the signed-in
 // user's RLS-scoped store, so the database decides what they may change.
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { runScenarios } from "@/lib/scenarioRunner";
 import { runWorkflow, sendEvent, notify } from "@/lib/n8n";
 import { getRole } from "@/lib/roles";
 import { STARTER_AGENCY, STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
@@ -42,7 +44,22 @@ export async function saveAgent(tenantId: string, input: Omit<Agent, "createdAt"
     if (!input.name.trim()) return { ok: false, error: "Give the agent a name." };
     const saved = await store.saveAgent(tenant.id, input);
     await store.audit(tenant.id, { actorType: "user", actor, action: input.id ? "agent.updated" : "agent.hired", detail: { agentId: saved.id, name: saved.name, status: saved.status } });
-    return { ok: true, message: `${saved.name} saved.`, data: saved.id };
+    // Every change to a live agent re-runs its scenario tests in the background.
+    if (saved.status === "live") {
+      after(() => runScenarios(store, tenant, saved, "change").catch((err) => console.error("Scenario tests failed to run", err)));
+    }
+    return { ok: true, message: `${saved.name} saved.${saved.status === "live" ? " Scenario tests are re-running." : ""}`, data: saved.id };
+  });
+}
+
+export async function runAgentTests(tenantId: string, agentId: string) {
+  return wrap(async () => {
+    const { store, tenant } = await ctx(tenantId);
+    const agent = (await store.listAgents(tenant.id)).find((a) => a.id === agentId);
+    if (!agent) return { ok: false, error: "Agent not found." };
+    const run = await runScenarios(store, tenant, agent, "manual");
+    if (run.skipped) return { ok: false, error: run.skipped };
+    return { ok: true, message: `${agent.name} passed ${run.passed} of ${run.total} scenario tests.` };
   });
 }
 

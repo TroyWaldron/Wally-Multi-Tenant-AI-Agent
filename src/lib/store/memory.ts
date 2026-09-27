@@ -2,6 +2,7 @@
 // click through the whole console before a Supabase project exists. Data
 // resets when the server restarts (and isn't shared between Vercel function
 // instances), so use it for local testing only.
+import { redactDeep } from "@/lib/pii";
 import { randomUUID } from "node:crypto";
 import { ROLE_LIBRARY } from "@/lib/roles";
 import { STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
@@ -313,7 +314,7 @@ export const memoryStore: Store = {
   },
   async audit(tenantId, e) {
     assertTenant(tenantId);
-    db().audit.push({ id: db().seq++, tenantId, detail: {}, createdAt: now(), ...e });
+    db().audit.push({ id: db().seq++, tenantId, createdAt: now(), ...e, detail: redactDeep(e.detail ?? {}) });
   },
 
   async listOutcomes(tenantId, limit = 200) {

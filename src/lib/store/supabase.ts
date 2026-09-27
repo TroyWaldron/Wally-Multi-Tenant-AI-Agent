@@ -1,3 +1,4 @@
+import { redactDeep } from "@/lib/pii";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ROLE_LIBRARY } from "@/lib/roles";
 import { serviceClient } from "@/lib/supabase";
@@ -415,7 +416,7 @@ export function supabaseStore(db: SupabaseClient): Store {
     },
     async audit(tenantId, e) {
       assertTenant(tenantId);
-      must(await db.from("audit_log").insert({ tenant_id: tenantId, actor_type: e.actorType, actor: e.actor, action: e.action, detail: e.detail ?? {} }));
+      must(await db.from("audit_log").insert({ tenant_id: tenantId, actor_type: e.actorType, actor: e.actor, action: e.action, detail: redactDeep(e.detail ?? {}) }));
     },
 
     async listOutcomes(tenantId, limit = 200) {
