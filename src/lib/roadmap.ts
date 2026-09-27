@@ -34,7 +34,7 @@ export const FEATURES: Feature[] = [
   { area: "Trust", name: "PII redaction (GDPR / HIPAA / SOC 2, T&T Data Protection Act)", phase: "P1", live: true },
   { area: "Trust", name: "Voice consent capture and call recording per jurisdiction", phase: "P3" },
   { area: "Trust", name: "Shared liability framework and agent insurance API", phase: "P4" },
-  { area: "Trust", name: "Accountability feedback into policy updates", phase: "P2" },
+  { area: "Trust", name: "Accountability feedback into policy updates", phase: "P2", live: true },
   { area: "Channels", name: "Website widget, one script tag, branded per tenant", phase: "P0", live: true },
   { area: "Channels", name: "Global WhatsApp router by phone_number_id", phase: "P0", live: true },
   { area: "Channels", name: "n8n inbound and outbound webhooks", phase: "P0", live: true },

@@ -100,7 +100,7 @@ export async function deleteAgent(tenantId: string, agentId: string) {
 
 /* --------------------------------------------------------------- approvals */
 
-export async function decideApproval(tenantId: string, approvalId: string, decision: "approved" | "rejected") {
+export async function decideApproval(tenantId: string, approvalId: string, decision: "approved" | "rejected", lesson?: string) {
   return wrap(async () => {
     const { store, tenant, actor } = await ctx(tenantId);
     const a = await store.decideApproval(tenant.id, approvalId, decision, actor);
@@ -108,6 +108,19 @@ export async function decideApproval(tenantId: string, approvalId: string, decis
     await store.audit(tenant.id, { actorType: "user", actor, action: `approval.${decision}`, detail: { approvalId, action: a.action } });
 
     let note = decision === "approved" ? `The team approved: ${a.summary}` : `The team declined: ${a.summary}`;
+    // Accountability loop: a reason given when declining becomes a standing
+    // rule on the agent ("Can't do"), so it stops asking for the same thing.
+    const rule = lesson?.trim().slice(0, 200);
+    let learned = "";
+    if (decision === "rejected" && rule && a.agentId) {
+      const agent = (await store.listAgents(tenant.id)).find((x) => x.id === a.agentId);
+      if (agent && !agent.boundaries.cannot.some((c) => c.toLowerCase() === rule.toLowerCase())) {
+        await store.saveAgent(tenant.id, { ...agent, boundaries: { ...agent.boundaries, cannot: [...agent.boundaries.cannot, rule] } });
+        await store.audit(tenant.id, { actorType: "user", actor, action: "policy.learned", detail: { agentId: agent.id, rule, approvalId } });
+        learned = ` ${agent.name} will follow this from now on.`;
+      }
+      note += ` Reason: ${rule}`;
+    }
     // Approved workflow actions run now, so the agent's request actually happens.
     if (decision === "approved" && typeof a.payload.workflow === "string") {
       const r = await runWorkflow(tenant, a.payload.workflow, (a.payload.input as Record<string, unknown>) ?? {}, { approvalId, approvedBy: actor });
@@ -115,7 +128,7 @@ export async function decideApproval(tenantId: string, approvalId: string, decis
     }
     if (a.conversationId) await store.addMessage(tenant.id, { conversationId: a.conversationId, role: "system", content: note, meta: { approvalId } });
     notify(tenant, "approval_decided", { approval: a });
-    return { ok: true, message: decision === "approved" ? "Approved." : "Declined." };
+    return { ok: true, message: decision === "approved" ? "Approved." : `Declined.${learned}` };
   });
 }
 

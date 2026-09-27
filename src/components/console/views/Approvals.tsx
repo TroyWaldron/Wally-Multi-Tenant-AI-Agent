@@ -1,12 +1,15 @@
 "use client";
 
-import { Check, ClipboardCheck, History, X } from "lucide-react";
+import { useState } from "react";
+import { Check, ClipboardCheck, GraduationCap, History, X } from "lucide-react";
 import { decideApproval } from "@/app/console/actions";
 import type { TenantData } from "../Console";
-import { Button, cardClass, Empty, Pill, SectionTitle, Table, timeAgo, useAction } from "../ui";
+import { Button, cardClass, Empty, inputClass, Pill, SectionTitle, Table, timeAgo, useAction } from "../ui";
 
 export function ApprovalsView({ data }: { data: TenantData }) {
   const { run, pending } = useAction();
+  const [declining, setDeclining] = useState<string | null>(null);
+  const [lesson, setLesson] = useState("");
   const open = data.approvals.filter((a) => a.status === "pending");
   const done = data.approvals.filter((a) => a.status !== "pending");
   const agentName = (id: string | null) => data.agents.find((a) => a.id === id)?.name ?? "n8n / system";
@@ -35,10 +38,43 @@ export function ApprovalsView({ data }: { data: TenantData }) {
                   <Button size="sm" variant="accent" disabled={pending} onClick={() => run(() => decideApproval(data.tenant.id, a.id, "approved"))}>
                     <Check className="h-3.5 w-3.5" /> {a.kind === "escalation" ? "I'll take it" : "Approve"}
                   </Button>
-                  <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => decideApproval(data.tenant.id, a.id, "rejected"))}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      a.kind === "escalation" || !a.agentId
+                        ? run(() => decideApproval(data.tenant.id, a.id, "rejected"))
+                        : (setDeclining(declining === a.id ? null : a.id), setLesson(""))
+                    }
+                  >
                     <X className="h-3.5 w-3.5" /> {a.kind === "escalation" ? "Dismiss" : "Decline"}
                   </Button>
                 </div>
+                {declining === a.id && (
+                  <form
+                    className="flex flex-col gap-2 rounded-xl bg-paper p-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      run(() => decideApproval(data.tenant.id, a.id, "rejected", lesson), () => setDeclining(null));
+                    }}
+                  >
+                    <label htmlFor={`lesson-${a.id}`} className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                      <GraduationCap className="h-3.5 w-3.5 text-lagoon" /> Teach {agentName(a.agentId)} (optional)
+                    </label>
+                    <input
+                      id={`lesson-${a.id}`}
+                      className={inputClass}
+                      value={lesson}
+                      onChange={(e) => setLesson(e.target.value)}
+                      placeholder="e.g. Never offer more than 10% off"
+                    />
+                    <p className="text-[11px] text-slate/55">Anything you write becomes a standing rule for the agent, so it stops asking for the same thing. Leave it blank to just decline.</p>
+                    <div>
+                      <Button size="sm" variant="secondary" disabled={pending}>Decline</Button>
+                    </div>
+                  </form>
+                )}
               </div>
             ))}
           </div>
