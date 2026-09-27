@@ -7,9 +7,18 @@ export type PolicyDecision = { decision: "allow" } | { decision: "approval"; rea
 // Tools that are how an agent asks for help; never blocked, or it could get stuck.
 const ALWAYS_ALLOWED = new Set(["request_approval", "escalate_to_human"]);
 
+/** Tools back-office AI staff get for working with the team (see staffDesk.ts). */
+export const OFFICE_TOOLS = new Set(["message_staff", "add_follow_up", "list_follow_ups", "close_follow_up"]);
+
+/** Back-office AI staff (channel "ops") work with the business's people, not its customers. */
+export function worksWithTeam(agent: Pick<Agent, "channels">) {
+  return agent.channels.includes("ops");
+}
+
 export function evaluate(agent: Agent, tool: string, input: Record<string, unknown>): PolicyDecision {
   const b = agent.boundaries;
-  if (!ALWAYS_ALLOWED.has(tool) && !b.allowedTools.includes(tool)) {
+  const office = OFFICE_TOOLS.has(tool) && worksWithTeam(agent);
+  if (!ALWAYS_ALLOWED.has(tool) && !office && !b.allowedTools.includes(tool)) {
     return { decision: "deny", reason: `${agent.name} is not allowed to use ${tool}.` };
   }
   if (tool === "run_workflow") {

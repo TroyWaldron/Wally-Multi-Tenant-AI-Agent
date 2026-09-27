@@ -6,6 +6,7 @@ import { assertTenant, type Store } from "@/lib/store/types";
 import type {
   Agency,
   AgencyInvite,
+  AgentTask,
   Agent,
   AgentVersion,
   Approval,
@@ -218,6 +219,23 @@ function agencyPatch(p: Partial<Agency>): Row {
   return out;
 }
 
+const task = (r: Row): AgentTask => ({
+  id: r.id,
+  tenantId: r.tenant_id,
+  agentId: r.agent_id,
+  conversationId: r.conversation_id,
+  title: r.title,
+  detail: r.detail,
+  assignee: r.assignee,
+  dueAt: r.due_at,
+  status: r.status,
+  chaseCount: r.chase_count,
+  lastChasedAt: r.last_chased_at,
+  doneAt: r.done_at,
+  doneNote: r.done_note,
+  createdAt: r.created_at,
+});
+
 function tenantPatch(p: Partial<Tenant>): Row {
   const out: Row = {};
   if (p.name !== undefined) out.name = p.name;
@@ -264,6 +282,29 @@ export function supabaseStore(db: SupabaseClient): Store {
     },
     async updateTenant(id, patch) {
       must(await db.from("tenants").update(tenantPatch(patch)).eq("id", id));
+    },
+
+    async listTasks(tenantId, status) {
+      assertTenant(tenantId);
+      let q = db.from("agent_tasks").select("*").eq("tenant_id", tenantId);
+      if (status) q = q.eq("status", status);
+      return must(await q.order("due_at").limit(200)).map(task);
+    },
+    async createTask(tenantId, t) {
+      assertTenant(tenantId);
+      const row = { tenant_id: tenantId, agent_id: t.agentId, conversation_id: t.conversationId, title: t.title, detail: t.detail, assignee: t.assignee, due_at: t.dueAt };
+      return task(must(await db.from("agent_tasks").insert(row).select("*").single()));
+    },
+    async updateTask(tenantId, id, patch) {
+      assertTenant(tenantId);
+      const row: Row = {};
+      if (patch.status !== undefined) row.status = patch.status;
+      if (patch.chaseCount !== undefined) row.chase_count = patch.chaseCount;
+      if (patch.lastChasedAt !== undefined) row.last_chased_at = patch.lastChasedAt;
+      if (patch.doneAt !== undefined) row.done_at = patch.doneAt;
+      if (patch.doneNote !== undefined) row.done_note = patch.doneNote;
+      if (patch.dueAt !== undefined) row.due_at = patch.dueAt;
+      must(await db.from("agent_tasks").update(row).eq("tenant_id", tenantId).eq("id", id));
     },
 
     async listAgencies() {

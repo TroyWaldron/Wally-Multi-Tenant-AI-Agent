@@ -10,6 +10,7 @@ import { assertTenant, type Store } from "@/lib/store/types";
 import type {
   Agency,
   AgencyInvite,
+  AgentTask,
   Agent,
   AgentVersion,
   Approval,
@@ -30,6 +31,7 @@ type Db = {
   tenants: Tenant[];
   agencies?: Agency[];
   agencyInvites?: AgencyInvite[];
+  tasks?: AgentTask[];
   agents: Agent[];
   channels: Channel[];
   contracts: Contract[];
@@ -190,6 +192,22 @@ export const memoryStore: Store = {
   async updateTenant(id, patch) {
     const t = db().tenants.find((x) => x.id === id);
     if (t) Object.assign(t, patch, { id: t.id, publicKey: t.publicKey });
+  },
+
+  async listTasks(tenantId, status) {
+    assertTenant(tenantId);
+    return (db().tasks ??= []).filter((t) => t.tenantId === tenantId && (!status || t.status === status)).sort((a, b) => (a.dueAt < b.dueAt ? -1 : 1));
+  },
+  async createTask(tenantId, t) {
+    assertTenant(tenantId);
+    const task: AgentTask = { ...t, id: randomUUID(), tenantId, status: "open", chaseCount: 0, lastChasedAt: null, doneAt: null, doneNote: null, createdAt: now() };
+    (db().tasks ??= []).push(task);
+    return task;
+  },
+  async updateTask(tenantId, id, patch) {
+    assertTenant(tenantId);
+    const t = (db().tasks ?? []).find((x) => x.tenantId === tenantId && x.id === id);
+    if (t) Object.assign(t, patch);
   },
 
   async listAgencies() {

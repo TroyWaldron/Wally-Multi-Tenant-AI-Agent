@@ -1,6 +1,7 @@
 import type {
   Agency,
   AgencyInvite,
+  AgentTask,
   Agent,
   AgentVersion,
   Approval,
@@ -34,6 +35,10 @@ export interface Store {
   updateTenant(id: string, patch: Partial<Tenant>): Promise<void>;
 
   /** Agencies sit above businesses: RLS shows platform admins every agency and agency admins their own. */
+  listTasks(tenantId: string, status?: AgentTask["status"]): Promise<AgentTask[]>;
+  createTask(tenantId: string, t: Pick<AgentTask, "agentId" | "conversationId" | "title" | "detail" | "assignee" | "dueAt">): Promise<AgentTask>;
+  updateTask(tenantId: string, id: string, patch: Partial<Pick<AgentTask, "status" | "chaseCount" | "lastChasedAt" | "doneAt" | "doneNote" | "dueAt">>): Promise<void>;
+
   listAgencies(): Promise<Agency[]>;
   getAgency(id: string): Promise<Agency | null>;
   createAgency(input: Pick<Agency, "name" | "slug">): Promise<Agency>;

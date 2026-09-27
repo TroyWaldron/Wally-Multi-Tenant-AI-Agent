@@ -6,7 +6,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessageParam, BetaTool, BetaToolResultBlockParam, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { runChatCompletions } from "@/lib/agent/chatCompletions";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
-import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
+import { budgetExceeded, evaluate, monthStartIso, worksWithTeam } from "@/lib/agent/policy";
+import { MANAGERS, describeTasks, dueAtFrom, messageStaff, whenIn } from "@/lib/staffDesk";
 import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
@@ -94,6 +95,50 @@ const TOOLS: BetaTool[] = [
   },
 ];
 
+// For back-office AI staff: working with the business's people.
+const OFFICE_TOOL_DEFS: BetaTool[] = [
+  {
+    name: "message_staff",
+    description: `Send a short message to a person at the business, or to "${MANAGERS}". It reaches their phone through the business's back office. Use it to ask for something, pass on information or follow up. Staff can reply to you.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: `The person's name as the team uses it, or "${MANAGERS}".` },
+        text: { type: "string", description: "The message, plain and brief, as you'd text a colleague." },
+      },
+      required: ["to", "text"],
+    },
+  },
+  {
+    name: "add_follow_up",
+    description: "Set a follow-up for a person (or the managers): something they should do by a time. They are told now, and reminded automatically when it falls due; if it keeps being ignored the managers are told.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "What needs doing, e.g. 'Confirm pool service for Villa Arizia'." },
+        assignee: { type: "string", description: `The person's name, or "${MANAGERS}".` },
+        due: { type: "string", description: "When, in the business's time: YYYY-MM-DD or YYYY-MM-DD HH:MM." },
+        detail: { type: "string", description: "Anything they need to know." },
+      },
+      required: ["title", "assignee", "due"],
+    },
+  },
+  {
+    name: "list_follow_ups",
+    description: "List the open follow-ups (yours and other AI staff's), with ids, who owns them and when they're due.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "close_follow_up",
+    description: "Mark a follow-up done (or cancelled) once the person confirms it, with a short note.",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "string" }, note: { type: "string" }, cancelled: { type: "boolean" } },
+      required: ["id"],
+    },
+  },
+];
+
 function describe(p: Personality) {
   const band = (v: number, lo: string, mid: string, hi: string) => (v < 34 ? lo : v < 67 ? mid : hi);
   return [
@@ -151,6 +196,7 @@ Decision boundaries:
 - Workflows you can run: ${b.workflows.join(", ") || "none"}
 - You cannot: ${b.cannot.join("; ") || "no extra limits"}
 ${b.hours ? `- Working hours: ${b.hours}` : ""}
+${worksWithTeam(agent) ? `\nYou work with the ${tenant.name} team, not its customers. When something needs a person, message them (message_staff) or set a follow-up with a due time (add_follow_up); Wally reminds them and tells the managers if it's ignored. Close follow-ups when people confirm. Keep messages short, like texting a colleague.` : ""}
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
 
@@ -249,6 +295,37 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       });
       if (!r.ok) return ev("error", `The ${String(input.workflow)} workflow isn't available right now (${r.error ?? `HTTP ${r.status}`}). Offer to have the team follow up.`);
       return ev("ran", typeof r.body === "string" ? r.body : JSON.stringify(r.body));
+    }
+    case "message_staff": {
+      const to = String(input.to ?? "").trim();
+      const text = String(input.text ?? "").trim();
+      if (!to || !text) return ev("error", "Say who the message is for and what it says.");
+      const sent = await messageStaff(tenant, { agent: agent.name, to, text, conversationId: conversation.id, kind: "message" });
+      return sent ? ev("ran", `Sent to ${to}.`) : ev("error", "No staff channel is set up for this business yet (back office alerts or Slack). Put the message in your reply instead.");
+    }
+    case "add_follow_up": {
+      const dueAt = dueAtFrom(String(input.due ?? ""), tenant.timezone);
+      if (!dueAt) return ev("error", "Give the due time as YYYY-MM-DD or YYYY-MM-DD HH:MM.");
+      const t = await store.createTask(tenant.id, {
+        agentId: agent.id,
+        conversationId: conversation.id,
+        title: String(input.title ?? "").slice(0, 200),
+        detail: input.detail ? String(input.detail).slice(0, 1000) : null,
+        assignee: String(input.assignee ?? MANAGERS).slice(0, 80),
+        dueAt,
+      });
+      const when = whenIn(dueAt, tenant.timezone);
+      const sent = await messageStaff(tenant, { agent: agent.name, to: t.assignee, text: `New follow-up: "${t.title}", by ${when}.${t.detail ? ` ${t.detail}` : ""}`, conversationId: conversation.id, taskId: t.id, kind: "follow_up" });
+      return ev("ran", `Follow-up ${t.id} set for ${t.assignee}, due ${when}.${sent ? " They've been told." : " No staff channel is set up, so tell them in your reply."}`);
+    }
+    case "list_follow_ups":
+      return ev("ran", describeTasks(await store.listTasks(tenant.id, "open"), tenant.timezone));
+    case "close_follow_up": {
+      const id = String(input.id ?? "");
+      const t = (await store.listTasks(tenant.id, "open")).find((x) => x.id === id || x.id.startsWith(id));
+      if (!t) return ev("error", "No open follow-up with that id. Use list_follow_ups.");
+      await store.updateTask(tenant.id, t.id, { status: input.cancelled ? "cancelled" : "done", doneAt: new Date().toISOString(), doneNote: input.note ? String(input.note).slice(0, 500) : null });
+      return ev("ran", `Closed "${t.title}".`);
     }
     default:
       return ev("error", `Unknown tool ${block.name}.`);
@@ -360,6 +437,7 @@ export async function runAgent(args: {
   const connectorTools = await connectorToolsFor(store, tenant.id, agent);
   const tools = [
     ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
+    ...(worksWithTeam(agent) ? OFFICE_TOOL_DEFS : []),
     ...asModelTools(connectorTools),
   ];
   const history = await store.listMessages(tenant.id, conversation.id);

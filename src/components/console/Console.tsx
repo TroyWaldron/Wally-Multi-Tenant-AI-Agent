@@ -28,7 +28,7 @@ import { logout } from "@/app/login/actions";
 import { WallyMark } from "@/components/WallyMark";
 import type { ModelInfo } from "@/lib/agent/models";
 import type { SettingStatus } from "@/lib/settings";
-import type { Agency, AgencyInvite, Agent, Approval, AuditEntry, Channel, Connector, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
+import type { Agency, AgencyInvite, Agent, AgentTask, Approval, AuditEntry, Channel, Connector, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
 import { ToastProvider } from "./ui";
 import { DashboardView } from "./views/Dashboard";
 import { AgentsView } from "./views/Agents";
@@ -92,6 +92,8 @@ export type TenantData = Base & {
   team: TeamMember[];
   /** Last 30 days of value from guest-facing AI staff against their price. */
   roi: Roi;
+  /** Open follow-ups AI staff set for the team. */
+  tasks: AgentTask[];
 };
 
 export type ConsoleData = (Base & { tenant: null }) | TenantData;

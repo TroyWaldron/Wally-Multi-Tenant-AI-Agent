@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Bot, ClipboardCheck, Coins, Inbox, ScrollText, TrendingUp } from "lucide-react";
+import { AlertTriangle, Bot, ListChecks, ClipboardCheck, Coins, Inbox, ScrollText, TrendingUp } from "lucide-react";
 import type { TenantData, ViewId } from "../Console";
 import { HEALTH_LABEL } from "@/lib/team";
 import { HEALTH_DOT } from "../OrgChart";
@@ -102,6 +102,29 @@ export function DashboardView({ data, onNavigate }: { data: TenantData; onNaviga
               </button>
             ))}
           </div>
+          {data.tasks.length > 0 && (
+            <>
+              <div className="mt-5"><SectionTitle icon={ListChecks}>Follow-ups the AI staff are chasing</SectionTitle></div>
+              <div className={`${cardClass} divide-y divide-ink/5`}>
+                {data.tasks.slice(0, 6).map((t) => {
+                  const late = new Date(t.dueAt).getTime() < data.now;
+                  return (
+                    <div key={t.id} className="flex items-start gap-3 px-4 py-2.5 text-sm">
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${late ? "bg-coral" : "bg-lagoon"}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-ink">{t.title}</div>
+                        <div className="text-xs text-slate/55">
+                          {t.assignee} · {late ? "overdue since " : "due "}
+                          {new Date(t.dueAt).toLocaleString(undefined, { timeZone: data.tenant.timezone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                          {t.chaseCount ? ` · reminded ${t.chaseCount}x` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

@@ -49,6 +49,25 @@ export type Agency = {
   branding: { brandName?: string; color?: string; logo?: string; poweredBy?: string };
 };
 
+/** A follow-up an AI staff member set for a person at the business. */
+export type AgentTask = {
+  id: string;
+  tenantId: string;
+  agentId: string | null;
+  conversationId: string | null;
+  title: string;
+  detail: string | null;
+  /** A person's name, or "managers". */
+  assignee: string;
+  dueAt: string;
+  status: "open" | "done" | "cancelled";
+  chaseCount: number;
+  lastChasedAt: string | null;
+  doneAt: string | null;
+  doneNote: string | null;
+  createdAt: string;
+};
+
 export type AgencyInvite = { id: string; agencyId: string; email: string; invitedBy: string | null; createdAt: string };
 
 export type Tenant = {

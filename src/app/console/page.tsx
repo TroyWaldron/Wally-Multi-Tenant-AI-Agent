@@ -98,6 +98,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     computeRoi(store, tenant),
     store.listConnectors(tenant.id),
   ]);
+  const tasks = await store.listTasks(tenant.id, "open");
   const tokens = await Promise.all(connectors.map((c) => (c.auth === "bearer" ? getConfig(tenant.id, tokenKey(c.id)) : Promise.resolve(undefined))));
 
   const billableThisMonth: Record<string, number> = {};
@@ -129,6 +130,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     billableThisMonth,
     team,
     roi,
+    tasks,
     connectors: connectors.map((c, i) => ({ ...c, hasToken: Boolean(tokens[i]) })),
   };
   return <Console data={data} />;
