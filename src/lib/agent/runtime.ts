@@ -290,6 +290,7 @@ export async function runAgent(args: {
   let outputTokens = 0;
   let reply = "";
   let usedModel: string | null = null;
+  let billedAs = modelOrder[0].id;
 
   for (const info of modelOrder) {
     try {
@@ -298,6 +299,7 @@ export async function runAgent(args: {
           ? await runDeepSeek({ apiKey: keys.deepseek!, model: info.id, system, tools, history: historyToMessages(history.slice(-30)), ctx, toolEvents })
           : await runClaude({ apiKey: keys.anthropic!, info, system, tools, messages: historyToMessages(history.slice(-30)), ctx, toolEvents });
       usedModel = r.model;
+      billedAs = info.id;
       inputTokens += r.inputTokens;
       outputTokens += r.outputTokens;
       reply = r.reply;
@@ -309,7 +311,9 @@ export async function runAgent(args: {
     }
   }
 
-  const cost = costUsd(usedModel ?? modelOrder[0].id, inputTokens, outputTokens);
+  // Price by the catalog entry that ran: providers may report a different
+  // model name (DeepSeek answers as "deepseek-flash").
+  const cost = costUsd(getModel(usedModel) ? usedModel! : billedAs, inputTokens, outputTokens);
   await store.recordUsage(tenant.id, { agentId: agent.id, kind: "llm", model: usedModel, inputTokens, outputTokens, minutes: 0, costUsd: cost });
   return finish({
     reply: reply || "Thanks, the team will follow up with you shortly.",

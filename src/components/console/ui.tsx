@@ -214,5 +214,7 @@ export function money(value: number, currency: string) {
 }
 
 export function usd(value: number) {
+  // Single agent replies cost fractions of a cent, so show enough digits to see them.
+  if (value > 0 && value < 0.01) return `US$${value.toFixed(4)}`;
   return `US$${value.toFixed(value < 10 ? 2 : 0)}`;
 }
