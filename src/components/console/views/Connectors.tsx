@@ -14,6 +14,23 @@ const AUTH: { id: Connector["auth"]; label: string }[] = [
   { id: "none", label: "No sign-in" },
 ];
 
+// Ready-made starting points. Each fills the form; the business still
+// pastes its own URL or key, and approval defaults cover money and messages.
+const PRESETS: { id: string; label: string; name: string; url: string; auth: Connector["auth"]; approval: string[]; hint: string }[] = [
+  { id: "custom", label: "Any MCP server", name: "", url: "", auth: "bearer", approval: [], hint: "Paste the server's URL and, if it needs one, its token." },
+  { id: "website", label: "The business's own website or back office", name: "Ops Hub", url: "https://www.example.com/api/mcp", auth: "relay_secret", approval: [], hint: "Signs in with the website relay secret already saved in Settings." },
+  {
+    id: "stripe", label: "Stripe (payments, invoices, refunds)", name: "Stripe", url: "https://mcp.stripe.com", auth: "bearer",
+    approval: ["create_refund", "cancel_subscription", "update_subscription", "create_invoice", "finalize_invoice", "create_payment_link"],
+    hint: "Use a restricted key (rk_...) from Stripe > Developers > API keys with only the access the AI needs. Refunds, invoices and payment links need approval.",
+  },
+  {
+    id: "zapier", label: "Zapier (Google Calendar, QuickBooks, Xero, Gmail and more)", name: "Zapier", url: "", auth: "none", approval: [],
+    hint: "At mcp.zapier.com, create a server, add the actions (for example Google Calendar: Find events), and paste its URL here. After Test, tick Needs approval on anything that sends, books or charges.",
+  },
+  { id: "n8n", label: "An n8n workflow (MCP Server Trigger)", name: "n8n tools", url: "", auth: "bearer", approval: [], hint: "Paste the MCP Server Trigger's production URL and the bearer token set on that trigger." },
+];
+
 /**
  * A business's own systems, reached over MCP. Each connector says which AI
  * staff may use it and which of its tools need a person's approval first.
@@ -23,9 +40,17 @@ export function ConnectorsSection({ data }: { data: TenantData }) {
   const [tools, setTools] = useState<Record<string, Tool[]>>({});
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [auth, setAuth] = useState<Connector["auth"]>("relay_secret");
+  const [auth, setAuth] = useState<Connector["auth"]>("bearer");
   const [token, setToken] = useState("");
   const [agentIds, setAgentIds] = useState<string[]>([]);
+  const [preset, setPreset] = useState(PRESETS[0]);
+  const pick = (id: string) => {
+    const p = PRESETS.find((x) => x.id === id) ?? PRESETS[0];
+    setPreset(p);
+    setName(p.name);
+    setUrl(p.url);
+    setAuth(p.auth);
+  };
   const agentName = (id: string) => data.agents.find((a) => a.id === id)?.name ?? "removed";
 
   const save = (c: Connector & { hasToken: boolean }, patch: Partial<Connector>) =>
@@ -105,9 +130,15 @@ export function ConnectorsSection({ data }: { data: TenantData }) {
             className="grid gap-4 md:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
-              run(() => saveConnector(data.tenant.id, { name, url, auth, token, agentIds, allowedTools: [], approvalTools: [], enabled: true }), () => { setName(""); setUrl(""); setToken(""); setAgentIds([]); });
+              run(() => saveConnector(data.tenant.id, { name, url, auth, token, agentIds, allowedTools: [], approvalTools: preset.approval, enabled: true }), () => { pick("custom"); setToken(""); setAgentIds([]); });
             }}
           >
+            <Field label="Start from" htmlFor="cn-preset" hint={preset.hint}>
+              <select id="cn-preset" className={inputClass} value={preset.id} onChange={(e) => pick(e.target.value)}>
+                {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </Field>
+            <div className="hidden md:block" />
             <Field label="Name" htmlFor="cn-name"><input id="cn-name" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Sunsational Ops Hub" /></Field>
             <Field label="MCP server URL" htmlFor="cn-url"><input id="cn-url" className={inputClass} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.example.com/api/mcp" /></Field>
             <Field label="Sign in with" htmlFor="cn-auth">
