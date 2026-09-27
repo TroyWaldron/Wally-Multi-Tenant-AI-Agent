@@ -83,3 +83,27 @@ export async function alertSlack(tenant: Pick<Tenant, "id">, kind: "needs_person
     await systemStore().audit(tenant.id, { actorType: "system", actor: "slack", action: SLACK_THREAD, detail: { conversationId: a.conversationId, ts: posted.ts, channel: alertChannel } });
   }
 }
+
+/**
+ * An AI staff member asks permission: post it to the alert channel with
+ * Approve and Decline buttons (Slack Interactivity must point at the same
+ * events URL). The decision runs exactly as it would from the console.
+ */
+export async function postApprovalToSlack(tenant: Pick<Tenant, "id">, a: { id: string; summary: string; action: string }) {
+  const { token, alertChannel } = await slackConfig(tenant.id);
+  if (!token || !alertChannel) return;
+  await slackApi(token, "chat.postMessage", {
+    channel: alertChannel,
+    text: `Approval needed: ${a.summary}`,
+    blocks: [
+      { type: "section", text: { type: "mrkdwn", text: `:raised_hand: *Approval needed*\n${a.summary}` } },
+      {
+        type: "actions",
+        elements: [
+          { type: "button", style: "primary", text: { type: "plain_text", text: "Approve" }, action_id: "approve", value: a.id },
+          { type: "button", style: "danger", text: { type: "plain_text", text: "Decline" }, action_id: "decline", value: a.id },
+        ],
+      },
+    ],
+  });
+}

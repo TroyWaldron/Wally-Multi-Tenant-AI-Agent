@@ -6,7 +6,7 @@
 // Both carry X-Wally-Secret so the workflow's first node can reject forgeries.
 import { after } from "next/server";
 import { getConfig } from "@/lib/settings";
-import { alertSlack } from "@/lib/slack";
+import { alertSlack, postApprovalToSlack } from "@/lib/slack";
 import type { Conversation, Tenant } from "@/lib/types";
 
 export const N8N_EVENTS = [
@@ -60,6 +60,11 @@ export function notify(tenant: Pick<Tenant, "id" | "slug" | "name">, event: N8nE
     const r = await sendEvent(tenant, event, data);
     if (!r.ok && !r.error?.startsWith("No n8n webhook URL")) console.error(`n8n ${event} failed:`, r.error ?? `HTTP ${r.status}`);
   });
+  const approval = data.approval as { id?: string; kind?: string; summary?: string; action?: string } | undefined;
+  if (event === "approval_requested" && approval?.id && approval.kind === "action") {
+    const a = { id: approval.id, summary: approval.summary ?? "", action: approval.action ?? "" };
+    after(() => postApprovalToSlack(tenant, a).catch((err) => console.error("slack approval failed", err)));
+  }
   if (needsPerson(event, data)) {
     after(() => alertBackOffice(tenant, event, data));
     if (data.conversationId) after(() => alertSlack(tenant, event === "escalated" ? "needs_person" : "guest_message", slackAlertOf(data)).catch((err) => console.error("slack alert failed", err)));
