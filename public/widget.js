@@ -160,11 +160,12 @@
         .then(function (d) {
           if (d.conversationId) try { localStorage.setItem(storageKey, d.conversationId); } catch (err) {}
           lastSent = Date.now();
+          // Once the team has the chat, say so once and then stay quiet.
+          if (d.reply) add("assistant", d.reply);
+          else if (d.waiting && !waiting) add("assistant", "Thanks, a member of the team will reply here shortly.");
+          else if (d.error) add("assistant", d.error);
           waiting = Boolean(d.waiting);
           schedule();
-          if (d.reply) add("assistant", d.reply);
-          else if (d.waiting) add("assistant", "Thanks, a member of the team will reply here shortly.");
-          else if (d.error) add("assistant", d.error);
         })
         .catch(function () { add("assistant", "Sorry, the connection dropped. Please try again."); })
         .finally(function () { busy = false; typing.textContent = ""; });
