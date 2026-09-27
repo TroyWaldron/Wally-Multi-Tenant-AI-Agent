@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { FileSignature, Pencil, Receipt, Sparkles, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { FileSignature, Layers, Pencil, Receipt, Sparkles, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { deleteContract, saveContract } from "@/app/console/actions";
-import { contractActiveOn, monthCharge, SUGGESTED_PLAN } from "@/lib/billing";
+import { contractActiveOn, monthCharge, PRICE_TIERS, suggestedPlan, tierFor } from "@/lib/billing";
+import { getRole } from "@/lib/roles";
 import type { Contract } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { Button, Card, Field, inputClass, MetricCard, Pill, SectionTitle, Table, useAction, usd } from "../ui";
@@ -24,9 +25,16 @@ export function BillingView({ data }: { data: TenantData }) {
   const { run, pending } = useAction();
   const admin = data.isPlatformAdmin;
   const today = new Date(data.now).toISOString().slice(0, 10);
+  // A new agreement is priced from the AI employee's role: a receptionist
+  // costs less than a coordinator, a manager or a CEO.
+  const planFor = (agentId: string | null) => {
+    const agent = data.agents.find((a) => a.id === agentId);
+    return suggestedPlan(agent?.templateKey, agent ? getRole(agent.templateKey)?.name : "Staff team");
+  };
+  const firstLive = data.agents.find((a) => a.status === "live")?.id ?? null;
   const blank = (): Draft => ({
-    agentId: data.agents.find((a) => a.status === "live")?.id ?? null,
-    ...SUGGESTED_PLAN,
+    agentId: firstLive,
+    ...planFor(firstLive),
     startsOn: today,
     endsOn: null,
     status: "active",
@@ -108,12 +116,26 @@ export function BillingView({ data }: { data: TenantData }) {
         </p>
       </div>
 
+      <div>
+        <SectionTitle icon={Layers}>Introductory prices by role</SectionTitle>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {PRICE_TIERS.map((t) => (
+            <Card key={t.key} title={t.name}>
+              <div className="font-heading text-2xl font-bold text-ink tabular-nums">{price(t.monthlyFee, "USD")}<span className="text-sm font-normal text-slate/55"> a month</span></div>
+              <div className="mt-1 text-xs text-slate/60">{t.includedConversations} chats or tasks included, then {price(t.overageRate, "USD")} each</div>
+              <div className="mt-3 text-xs text-slate/70">{t.roles.map((k) => getRole(k)?.name ?? k).join(", ")}</div>
+            </Card>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-slate/50">Per AI employee. No setup fee while introductory pricing runs.</p>
+      </div>
+
       {admin && draft && (
         <Card title={draft.id ? "Edit agreement" : "New agreement"}>
           {!draft.id && (
             <p className="mb-4 flex items-start gap-2 rounded-xl bg-lagoon/8 p-3 text-xs text-slate/80">
               <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-lagoon" />
-              Prefilled with the suggested AI receptionist price: US$149 a month with 300 guest chats included, then US$0.50 a chat, plus a US$299 setup fee. That sits under the per-chat prices of the big help desk AI agents (about US$1 to US$2 per resolved chat) and inside the US$100 to US$400 a month small hotels pay for guest messaging tools.
+              Prefilled with the introductory {tierFor(data.agents.find((a) => a.id === draft.agentId)?.templateKey).name.toLowerCase()} price for this AI employee. Change who it covers and the price follows the role; edit any figure to match the contract.
             </p>
           )}
           <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -121,7 +143,14 @@ export function BillingView({ data }: { data: TenantData }) {
               <input className={inputClass} value={draft.planName} onChange={(e) => set("planName", e.target.value)} required />
             </Field>
             <Field label="Covers">
-              <select className={inputClass} value={draft.agentId ?? ""} onChange={(e) => set("agentId", e.target.value || null)}>
+              <select
+                className={inputClass}
+                value={draft.agentId ?? ""}
+                onChange={(e) => {
+                  const agentId = e.target.value || null;
+                  setDraft((d) => (d ? { ...d, agentId, ...(d.id ? {} : planFor(agentId)) } : d));
+                }}
+              >
                 {data.agents.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
