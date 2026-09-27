@@ -5,6 +5,7 @@ import { serviceClient } from "@/lib/supabase";
 import { assertTenant, type Store } from "@/lib/store/types";
 import type {
   Agent,
+  AgentVersion,
   Approval,
   AuditEntry,
   Channel,
@@ -55,6 +56,7 @@ const agent = (r: Row): Agent => ({
   channels: r.channels ?? [],
   voice: r.voice ?? {},
   monthlyBudgetUsd: Number(r.monthly_budget_usd),
+  experiment: r.experiment ?? null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -106,9 +108,12 @@ const conversation = (r: Row): Conversation => ({
   channel: r.channel,
   contact: r.contact ?? {},
   status: r.status,
+  variant: r.variant ?? null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
+
+const agentVersion = (r: Row): AgentVersion => ({ id: r.id, tenantId: r.tenant_id, agentId: r.agent_id, snapshot: r.snapshot, note: r.note, createdBy: r.created_by, createdAt: r.created_at });
 
 const message = (r: Row): Message => ({
   id: r.id,
@@ -273,6 +278,7 @@ export function supabaseStore(db: SupabaseClient): Store {
         channels: a.channels,
         voice: a.voice,
         monthly_budget_usd: a.monthlyBudgetUsd,
+        ...(a.experiment !== undefined ? { experiment: a.experiment } : {}),
         updated_at: new Date().toISOString(),
       };
       if (a.id) {
@@ -283,6 +289,15 @@ export function supabaseStore(db: SupabaseClient): Store {
     async deleteAgent(tenantId, id) {
       assertTenant(tenantId);
       must(await db.from("agents").delete().eq("tenant_id", tenantId).eq("id", id));
+    },
+
+    async listAgentVersions(tenantId, agentId) {
+      assertTenant(tenantId);
+      return must(await db.from("agent_versions").select("*").eq("tenant_id", tenantId).eq("agent_id", agentId).order("created_at", { ascending: false }).limit(30)).map(agentVersion);
+    },
+    async addAgentVersion(tenantId, v) {
+      assertTenant(tenantId);
+      return agentVersion(must(await db.from("agent_versions").insert({ tenant_id: tenantId, agent_id: v.agentId, snapshot: v.snapshot, note: v.note, created_by: v.createdBy }).select("*").single()));
     },
 
     async listChannels(tenantId) {
@@ -358,12 +373,12 @@ export function supabaseStore(db: SupabaseClient): Store {
       const rows: Row[] = [];
       for (let from = 0; ; from += 1000) {
         const page = must(
-          await db.from("conversations").select("id, agent_id, channel, status, created_at").eq("tenant_id", tenantId).gte("created_at", sinceIso).order("created_at").range(from, from + 999)
+          await db.from("conversations").select("id, agent_id, channel, status, created_at, variant").eq("tenant_id", tenantId).gte("created_at", sinceIso).order("created_at").range(from, from + 999)
         );
         rows.push(...page);
         if (page.length < 1000) break;
       }
-      return rows.map((r: Row) => ({ id: r.id, agentId: r.agent_id, channel: r.channel, status: r.status, createdAt: r.created_at }));
+      return rows.map((r: Row) => ({ id: r.id, agentId: r.agent_id, channel: r.channel, status: r.status, createdAt: r.created_at, variant: r.variant ?? null }));
     },
     async getConversation(tenantId, id) {
       assertTenant(tenantId);
@@ -389,7 +404,7 @@ export function supabaseStore(db: SupabaseClient): Store {
     },
     async createConversation(tenantId, c) {
       assertTenant(tenantId);
-      return conversation(must(await db.from("conversations").insert({ tenant_id: tenantId, agent_id: c.agentId, channel: c.channel, contact: c.contact }).select("*").single()));
+      return conversation(must(await db.from("conversations").insert({ tenant_id: tenantId, agent_id: c.agentId, channel: c.channel, contact: c.contact, variant: c.variant ?? null }).select("*").single()));
     },
     async setConversationStatus(tenantId, id, status) {
       assertTenant(tenantId);

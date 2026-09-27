@@ -75,9 +75,16 @@ export type Agent = {
   channels: string[];
   voice: { tts?: string; voiceId?: string; stt?: string };
   monthlyBudgetUsd: number;
+  /** A/B test: share (%) of new chats that get a saved persona version instead of the current one. */
+  experiment?: Experiment | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/** The parts of an agent that make up its persona, as kept in each version. */
+export type PersonaSnapshot = Pick<Agent, "title" | "instructions" | "personality">;
+export type AgentVersion = { id: string; tenantId: string; agentId: string; snapshot: PersonaSnapshot; note: string | null; createdBy: string | null; createdAt: string };
+export type Experiment = { versionId: string; share: number; startedAt: string };
 
 /**
  * What a business pays Wally for an AI staff member (or a business-wide
@@ -118,6 +125,8 @@ export type Conversation = {
   channel: string;
   contact: { name?: string; phone?: string; email?: string };
   status: "open" | "waiting_human" | "closed";
+  /** Which persona the chat got while its agent ran an A/B test. */
+  variant?: "A" | "B" | null;
   createdAt: string;
   updatedAt: string;
 };

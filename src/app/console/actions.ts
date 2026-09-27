@@ -19,6 +19,7 @@ import { decide } from "@/lib/approvals";
 import { embedPending, searchKnowledge } from "@/lib/embeddings";
 import { runHealthCheck as healthCheck } from "@/lib/health";
 import { listConnectorTools, tokenKey } from "@/lib/mcp";
+import { keepVersion, snapshotOf } from "@/lib/personas";
 import type { Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
@@ -47,7 +48,11 @@ export async function saveAgent(tenantId: string, input: Omit<Agent, "createdAt"
   return wrap(async () => {
     const { store, tenant, actor } = await ctx(tenantId);
     if (!input.name.trim()) return { ok: false, error: "Give the agent a name." };
-    const saved = await store.saveAgent(tenant.id, input);
+    // Experiments are started and stopped by their own actions, never by a form save.
+    const { experiment: _experiment, ...fields } = input;
+    void _experiment;
+    const saved = await store.saveAgent(tenant.id, fields);
+    await keepVersion(store, saved, actor);
     await store.audit(tenant.id, { actorType: "user", actor, action: input.id ? "agent.updated" : "agent.hired", detail: { agentId: saved.id, name: saved.name, status: saved.status } });
     // Every change to a live agent re-runs its scenario tests in the background.
     if (saved.status === "live") {
@@ -99,6 +104,82 @@ export async function deleteAgent(tenantId: string, agentId: string) {
     const { store, tenant, actor } = await ctx(tenantId);
     await store.deleteAgent(tenant.id, agentId);
     await store.audit(tenant.id, { actorType: "user", actor, action: "agent.removed", detail: { agentId } });
+  });
+}
+
+/* ---------------------------------------------------- persona versions */
+
+async function agentOf(store: Awaited<ReturnType<typeof ctx>>["store"], tenantId: string, agentId: string) {
+  const agent = await store.getAgent(tenantId, agentId);
+  if (!agent) throw new Error("Agent not found.");
+  return agent;
+}
+
+export type VersionsView = {
+  versions: { id: string; title: string | null; instructions: string; note: string | null; createdBy: string | null; createdAt: string; current: boolean }[];
+  experiment: { versionId: string; share: number; startedAt: string; results: Record<"A" | "B", { chats: number; handedOver: number; leads: number }> } | null;
+};
+
+export async function loadVersions(tenantId: string, agentId: string) {
+  return wrap(async () => {
+    const { store, tenant } = await ctx(tenantId);
+    const agent = await agentOf(store, tenant.id, agentId);
+    const versions = await store.listAgentVersions(tenant.id, agent.id);
+    const now = JSON.stringify(snapshotOf(agent));
+    let experiment: VersionsView["experiment"] = null;
+    if (agent.experiment) {
+      const convs = (await store.listConversationsSince(tenant.id, agent.experiment.startedAt)).filter((c) => c.agentId === agent.id && c.variant);
+      const approvals = await store.listApprovals(tenant.id);
+      const handed = new Set(approvals.filter((a) => a.kind === "escalation" && a.conversationId).map((a) => a.conversationId));
+      const leads = new Set((await store.listAudit(tenant.id, 1000)).filter((e) => e.action === "lead.captured").map((e) => e.detail.conversationId));
+      const tally = (v: "A" | "B") => {
+        const list = convs.filter((c) => c.variant === v);
+        return { chats: list.length, handedOver: list.filter((c) => c.status === "waiting_human" || handed.has(c.id)).length, leads: list.filter((c) => leads.has(c.id)).length };
+      };
+      experiment = { ...agent.experiment, results: { A: tally("A"), B: tally("B") } };
+    }
+    const data: VersionsView = {
+      versions: versions.map((v, i) => ({ id: v.id, title: v.snapshot.title, instructions: v.snapshot.instructions, note: v.note, createdBy: v.createdBy, createdAt: v.createdAt, current: i === 0 && JSON.stringify(snapshotOf(v.snapshot)) === now })),
+      experiment,
+    };
+    return { ok: true, data };
+  });
+}
+
+export async function restoreVersion(tenantId: string, agentId: string, versionId: string) {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    const agent = await agentOf(store, tenant.id, agentId);
+    const v = (await store.listAgentVersions(tenant.id, agent.id)).find((x) => x.id === versionId);
+    if (!v) return { ok: false, error: "That version no longer exists." };
+    const saved = await store.saveAgent(tenant.id, { ...agent, ...snapshotOf(v.snapshot), experiment: null });
+    await keepVersion(store, saved, actor, `Restored the version from ${new Date(v.createdAt).toISOString().slice(0, 10)}`);
+    await store.audit(tenant.id, { actorType: "user", actor, action: "agent.version_restored", detail: { agentId, versionId } });
+    return { ok: true, message: `${agent.name} is back to that version.` };
+  });
+}
+
+export async function startExperiment(tenantId: string, agentId: string, versionId: string, share: number) {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    const agent = await agentOf(store, tenant.id, agentId);
+    const pct = Math.round(Math.min(90, Math.max(10, share)));
+    await store.saveAgent(tenant.id, { ...agent, experiment: { versionId, share: pct, startedAt: new Date().toISOString() } });
+    await store.audit(tenant.id, { actorType: "user", actor, action: "agent.experiment_started", detail: { agentId, versionId, share: pct } });
+    return { ok: true, message: `Testing: ${pct}% of new chats with ${agent.name} get the older version.` };
+  });
+}
+
+export async function stopExperiment(tenantId: string, agentId: string, keep: "A" | "B") {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    const agent = await agentOf(store, tenant.id, agentId);
+    if (!agent.experiment) return { ok: false, error: "No test is running." };
+    const v = keep === "B" ? (await store.listAgentVersions(tenant.id, agent.id)).find((x) => x.id === agent.experiment?.versionId) : undefined;
+    const saved = await store.saveAgent(tenant.id, { ...agent, ...(v ? snapshotOf(v.snapshot) : {}), experiment: null });
+    if (v) await keepVersion(store, saved, actor, "Kept the winning version of an A/B test");
+    await store.audit(tenant.id, { actorType: "user", actor, action: "agent.experiment_stopped", detail: { agentId, kept: keep } });
+    return { ok: true, message: keep === "B" ? `${agent.name} now uses the version that won.` : `${agent.name} keeps its current persona.` };
   });
 }
 

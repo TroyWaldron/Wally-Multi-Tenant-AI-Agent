@@ -53,7 +53,7 @@ export const FEATURES: Feature[] = [
   { area: "Voice", name: "Inbound and outbound phone calls (Twilio / Telnyx / Plivo)", phase: "P3" },
   { area: "Voice", name: "Voice persona per role (TTS voice, pace, accent)", phase: "P3" },
   { area: "Personality", name: "Tone sliders per agent", phase: "P0", live: true },
-  { area: "Personality", name: "Persona library with versions and A/B tests", phase: "P3" },
+  { area: "Personality", name: "Persona library with versions and A/B tests", phase: "P3", live: true },
   { area: "Outcomes", name: "Outcome events and per-agent spend", phase: "P0", live: true },
   { area: "Outcomes", name: "ROI dashboard for business owners", phase: "P2", live: true },
   { area: "Outcomes", name: "AI staff react to business events (bookings, payments, tickets)", phase: "P2", live: true },

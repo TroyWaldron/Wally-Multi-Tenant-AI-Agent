@@ -13,6 +13,7 @@ import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool 
 import { notify, runWorkflow } from "@/lib/n8n";
 import { getRole, renderPrompt } from "@/lib/roles";
 import { getConfig } from "@/lib/settings";
+import { withVariant } from "@/lib/personas";
 import type { Store } from "@/lib/store/types";
 import type { Agent, Conversation, Personality, Tenant } from "@/lib/types";
 
@@ -205,6 +206,8 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
     }
     case "capture_lead": {
       await store.recordOutcome(tenant.id, { agentId: agent.id, kind: "lead", value: 0, note: `${input.name}: ${input.interest}` });
+      // Ties the lead to its chat, so A/B tests can compare personas.
+      await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "lead.captured", detail: { conversationId: conversation.id } });
       notify(tenant, "lead_captured", { lead: input, conversationId: conversation.id, agent: agent.name });
       return ev("ran", "Lead saved and the team notified.");
     }
@@ -309,7 +312,8 @@ export async function runAgent(args: {
   /** Scenario tests: no side effects and no n8n notifications. */
   dryRun?: boolean;
 }): Promise<AgentRun> {
-  const { store, tenant, agent, conversation, text, dryRun } = args;
+  const { store, tenant, conversation, text, dryRun } = args;
+  const agent = await withVariant(store, args.agent, conversation.variant);
   const empty = { toolEvents: [], model: null, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
   await store.addMessage(tenant.id, { conversationId: conversation.id, role: "user", content: text });

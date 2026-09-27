@@ -7,6 +7,7 @@ import { BUSINESS_EVENTS } from "@/lib/businessEvents";
 import type { Agent, Personality } from "@/lib/types";
 import type { TenantData } from "../Console";
 import { OrgChart } from "../OrgChart";
+import { PersonaVersions } from "../PersonaVersions";
 import { Button, Card, cardClass, Empty, Field, inputClass, Pill, SectionTitle, useAction, usd } from "../ui";
 
 const CHANNELS = [
@@ -352,6 +353,8 @@ function AgentEditor({ agent, data, onClose }: { agent: Agent; data: TenantData;
               <input id="ag-budget" type="number" min={0} step={5} className={inputClass} value={a.monthlyBudgetUsd} onChange={(e) => set("monthlyBudgetUsd", Number(e.target.value))} />
             </Field>
           </div>
+
+          <div className="mt-2"><PersonaVersions tenantId={data.tenant.id} agentId={agent.id} onChanged={onClose} /></div>
 
           <div className="mt-4 rounded-xl border border-coral/20 bg-coral/5 p-4">
             {confirmDelete ? (

@@ -9,6 +9,7 @@ import { STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/st
 import { assertTenant, type Store } from "@/lib/store/types";
 import type {
   Agent,
+  AgentVersion,
   Approval,
   AuditEntry,
   Channel,
@@ -29,6 +30,7 @@ type Db = {
   channels: Channel[];
   contracts: Contract[];
   connectors: Connector[];
+  agentVersions?: AgentVersion[];
   conversations: Conversation[];
   messages: Message[];
   approvals: Approval[];
@@ -228,6 +230,16 @@ export const memoryStore: Store = {
   async deleteChannel(tenantId, id) {
     assertTenant(tenantId);
     db().channels = db().channels.filter((c) => !(c.tenantId === tenantId && c.id === id));
+  },
+  async listAgentVersions(tenantId, agentId) {
+    assertTenant(tenantId);
+    return (db().agentVersions ??= []).filter((v) => v.tenantId === tenantId && v.agentId === agentId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
+  },
+  async addAgentVersion(tenantId, v) {
+    assertTenant(tenantId);
+    const row: AgentVersion = { ...v, id: randomUUID(), tenantId, createdAt: new Date().toISOString() };
+    (db().agentVersions ??= []).push(row);
+    return row;
   },
   async listConnectors(tenantId) {
     assertTenant(tenantId);

@@ -3,6 +3,7 @@
 // tenant (widget key, WhatsApp phone_number_id, n8n secret, signed-in user).
 import { runAgent } from "@/lib/agent/runtime";
 import { notify } from "@/lib/n8n";
+import { pickVariant } from "@/lib/personas";
 import { redactPII } from "@/lib/pii";
 import type { Store } from "@/lib/store/types";
 import type { Conversation, Tenant } from "@/lib/types";
@@ -45,7 +46,9 @@ export async function handleInbound(args: {
   if (agent.status === "draft" && !args.allowDraft) throw new InboundError("This agent is not live yet.", 403);
 
   if (!conversation) {
-    conversation = await store.createConversation(tenant.id, { agentId: agent.id, channel, contact: args.contact ?? {} });
+    // Playground chats always get the current persona, so tests stay predictable.
+    const variant = channel === "playground" ? null : pickVariant(agent);
+    conversation = await store.createConversation(tenant.id, { agentId: agent.id, channel, contact: args.contact ?? {}, variant });
     notify(tenant, "conversation_started", { conversationId: conversation.id, channel, contact: conversation.contact, agent: agent.name });
   }
 

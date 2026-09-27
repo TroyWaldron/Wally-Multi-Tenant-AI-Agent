@@ -1,5 +1,6 @@
 import type {
   Agent,
+  AgentVersion,
   Approval,
   AuditEntry,
   Channel,
@@ -43,6 +44,8 @@ export interface Store {
   /** Global router lookup (not tenant-scoped by design): resolves which tenant owns an external id. */
   findChannel(kind: Channel["kind"], externalId: string): Promise<Channel | null>;
 
+  listAgentVersions(tenantId: string, agentId: string): Promise<AgentVersion[]>;
+  addAgentVersion(tenantId: string, v: Pick<AgentVersion, "agentId" | "snapshot" | "note" | "createdBy">): Promise<AgentVersion>;
   listConnectors(tenantId: string): Promise<Connector[]>;
   saveConnector(tenantId: string, c: Omit<Connector, "id" | "tenantId" | "createdAt"> & { id?: string }): Promise<Connector>;
   deleteConnector(tenantId: string, id: string): Promise<void>;
@@ -52,10 +55,10 @@ export interface Store {
 
   listConversations(tenantId: string, limit?: number): Promise<Conversation[]>;
   /** Every conversation started since a moment (for monthly counts and billing). */
-  listConversationsSince(tenantId: string, sinceIso: string): Promise<Pick<Conversation, "id" | "agentId" | "channel" | "status" | "createdAt">[]>;
+  listConversationsSince(tenantId: string, sinceIso: string): Promise<Pick<Conversation, "id" | "agentId" | "channel" | "status" | "createdAt" | "variant">[]>;
   getConversation(tenantId: string, id: string): Promise<Conversation | null>;
   findOpenConversation(tenantId: string, channel: string, contactKey: string): Promise<Conversation | null>;
-  createConversation(tenantId: string, c: Pick<Conversation, "agentId" | "channel" | "contact">): Promise<Conversation>;
+  createConversation(tenantId: string, c: Pick<Conversation, "agentId" | "channel" | "contact" | "variant">): Promise<Conversation>;
   setConversationStatus(tenantId: string, id: string, status: Conversation["status"]): Promise<void>;
   listMessages(tenantId: string, conversationId: string): Promise<Message[]>;
   addMessage(tenantId: string, m: Pick<Message, "conversationId" | "role" | "content"> & { meta?: Record<string, unknown> }): Promise<Message>;
