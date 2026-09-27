@@ -16,6 +16,7 @@ import { helpdeskFromWally, isHelpdesk } from "@/lib/helpdesk";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
 import { decide } from "@/lib/approvals";
+import { runHealthCheck as healthCheck } from "@/lib/health";
 import { listConnectorTools, tokenKey } from "@/lib/mcp";
 import type { Agent, Channel, Connector, Contract, Tenant } from "@/lib/types";
 
@@ -421,6 +422,16 @@ export async function clearSetting(tenantId: string, key: string) {
     if (def.scope === "platform" && !session.isPlatformAdmin) return { ok: false, error: "Only platform admins can change this." };
     await systemStore().deleteSetting(def.scope === "tenant" ? tenant.id : null, key);
     return { ok: true, message: `${def.label} cleared.` };
+  });
+}
+
+/** Settings > Health check: tests every channel, key, workflow and agent. */
+export async function runHealthCheck(tenantId: string) {
+  return wrap(async () => {
+    const { store, tenant } = await ctx(tenantId);
+    const items = await healthCheck(store, tenant);
+    const fails = items.filter((i) => i.status === "fail").length;
+    return { ok: true, message: fails ? `${fails} thing${fails > 1 ? "s" : ""} need${fails > 1 ? "" : "s"} fixing.` : "Everything checked out.", data: items };
   });
 }
 

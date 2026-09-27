@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BookOpen, Bot, Hash, KeyRound, MessageCircle, Send, ShieldCheck, TrendingUp, Workflow, Zap } from "lucide-react";
-import { clearSetting, saveSetting, testN8n } from "@/app/console/actions";
+import { BookOpen, Bot, HeartPulse, Hash, KeyRound, MessageCircle, Send, ShieldCheck, TrendingUp, Workflow, Zap } from "lucide-react";
+import { clearSetting, runHealthCheck, saveSetting, testN8n } from "@/app/console/actions";
+import type { HealthItem } from "@/lib/health";
 import type { SettingStatus } from "@/lib/settings";
 import type { TenantData } from "../Console";
 import { CopyBox } from "./CopyBox";
@@ -41,6 +42,8 @@ export function SettingsView({ data }: { data: TenantData }) {
           ))}
         </div>
       </div>
+
+      <HealthCheck tenantId={data.tenant.id} />
 
       <div>
         <SectionTitle icon={KeyRound}>Integrations</SectionTitle>
@@ -144,6 +147,36 @@ function N8nTest({ tenantId }: { tenantId: string }) {
         <Send className="h-4 w-4" /> {pending ? "Sending…" : "Send test event"}
       </Button>
       {result && <span className={`text-sm ${result.ok ? "text-leaf" : "text-coral"}`}>{result.text}</span>}
+    </div>
+  );
+}
+
+const DOT: Record<HealthItem["status"], string> = { ok: "bg-leaf", warn: "bg-amber", fail: "bg-coral", off: "bg-ink/20" };
+
+function HealthCheck({ tenantId }: { tenantId: string }) {
+  const { run, pending } = useAction();
+  const [items, setItems] = useState<HealthItem[] | null>(null);
+  const order = { fail: 0, warn: 1, off: 2, ok: 3 };
+  return (
+    <div>
+      <SectionTitle icon={HeartPulse} action={<Button size="sm" variant="accent" disabled={pending} onClick={() => run(() => runHealthCheck(tenantId), (r) => setItems(r.data as HealthItem[]))}>{pending ? "Checking…" : "Run health check"}</Button>}>
+        Health check
+      </SectionTitle>
+      {!items ? (
+        <p className="text-sm text-slate/60">Tests every channel, key, workflow, connector and AI staff member for this business, and says what to fix.</p>
+      ) : (
+        <div className={`${cardClass} divide-y divide-ink/5`}>
+          {[...items].sort((a, b) => order[a.status] - order[b.status]).map((i) => (
+            <div key={`${i.area}:${i.label}`} className="flex items-start gap-3 px-5 py-3">
+              <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${DOT[i.status]}`} aria-label={i.status} />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-ink">{i.label} <span className="font-normal text-slate/45">· {i.area}</span></div>
+                <div className="text-xs text-slate/65">{i.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

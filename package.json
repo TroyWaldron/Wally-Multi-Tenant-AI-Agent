@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "check:isolation": "node scripts/check-isolation.mjs",
+    "prebuild": "node scripts/check-isolation.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
