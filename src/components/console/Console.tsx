@@ -1,5 +1,6 @@
 "use client";
 
+import type { TeamMember } from "@/lib/team";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -74,6 +75,8 @@ export type TenantData = Base & {
   contracts: Contract[];
   /** Billable guest chats started this month, by agent id ("all" = whole business). */
   billableThisMonth: Record<string, number>;
+  /** The AI team with reporting lines and live health (org chart, dashboard). */
+  team: TeamMember[];
 };
 
 export type ConsoleData = (Base & { tenant: null }) | TenantData;

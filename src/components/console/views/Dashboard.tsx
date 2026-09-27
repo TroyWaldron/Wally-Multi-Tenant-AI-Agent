@@ -2,6 +2,8 @@
 
 import { AlertTriangle, Bot, ClipboardCheck, Coins, Inbox, ScrollText, TrendingUp } from "lucide-react";
 import type { TenantData, ViewId } from "../Console";
+import { HEALTH_LABEL } from "@/lib/team";
+import { HEALTH_DOT } from "../OrgChart";
 import { Card, cardClass, MetricCard, money, Pill, SectionTitle, timeAgo, usd } from "../ui";
 
 export function DashboardView({ data, onNavigate }: { data: TenantData; onNavigate: (v: ViewId) => void }) {
@@ -31,6 +33,7 @@ export function DashboardView({ data, onNavigate }: { data: TenantData; onNaviga
     const spent = data.usage.filter((u) => u.agentId === a.id && u.createdAt >= data.monthStart).reduce((s, u) => s + u.costUsd, 0);
     if (a.monthlyBudgetUsd > 0 && spent >= a.monthlyBudgetUsd * 0.8) alerts.push({ text: `${a.name} has used ${Math.round((spent / a.monthlyBudgetUsd) * 100)}% of this month's budget`, view: "agents" });
   }
+  for (const m of data.team.filter((t) => t.health === "down")) alerts.push({ text: `${m.name} is down: ${m.reason}`, view: "agents" });
   if (!data.settings.find((s) => s.key === "ANTHROPIC_API_KEY")?.configured) alerts.push({ text: "No Anthropic API key yet, so agents answer in demo mode", view: "settings" });
   if (!data.settings.find((s) => s.key === "N8N_WEBHOOK_URL")?.configured) alerts.push({ text: "n8n isn't connected, so workflows and WhatsApp replies won't run", view: "settings" });
 
@@ -43,6 +46,28 @@ export function DashboardView({ data, onNavigate }: { data: TenantData; onNaviga
         <MetricCard icon={TrendingUp} label="Outcome value (30d)" value={money(value30, data.tenant.currency)} hint={`${leads30} leads captured`} />
         <MetricCard icon={Coins} label="AI spend this month" value={usd(spendMonth)} accent />
       </div>
+
+      {data.team.some((t) => t.health !== "off") && (
+        <div>
+          <SectionTitle icon={Bot}>AI team right now</SectionTitle>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {data.team
+              .filter((t) => t.health !== "off")
+              .map((t) => (
+                <button key={t.id} onClick={() => onNavigate("agents")} className={`${cardClass} flex items-start gap-3 px-4 py-3 text-left transition hover:border-lagoon`}>
+                  <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${HEALTH_DOT[t.health]}`} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-ink">{t.name} <span className="font-normal text-slate/55">· {t.title ?? t.roleName}</span></span>
+                    <span className="block text-xs text-slate/60">
+                      {HEALTH_LABEL[t.health]}: {t.reason}
+                      {t.lastActiveAt ? `, last active ${timeAgo(t.lastActiveAt)}` : ""}
+                    </span>
+                  </span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">

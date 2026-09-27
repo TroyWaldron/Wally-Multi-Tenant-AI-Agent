@@ -5,6 +5,7 @@ import { Bot, MessageSquareText, Plus, ShieldCheck, SlidersHorizontal, Trash2, X
 import { deleteAgent, hireAgent, saveAgent } from "@/app/console/actions";
 import type { Agent, Personality } from "@/lib/types";
 import type { TenantData } from "../Console";
+import { OrgChart } from "../OrgChart";
 import { Button, Card, cardClass, Empty, Field, inputClass, Pill, SectionTitle, useAction, usd } from "../ui";
 
 const CHANNELS = [
@@ -13,6 +14,7 @@ const CHANNELS = [
   { id: "email", label: "Email" },
   { id: "slack", label: "Slack / Teams" },
   { id: "phone", label: "Phone (phase 3)" },
+  { id: "ops", label: "Back office (never talks to customers)" },
 ];
 
 const SLIDERS: { key: keyof Personality; label: string; low: string; high: string }[] = [
@@ -60,6 +62,16 @@ export function AgentsView({ data, onTest }: { data: TenantData; onTest: (id: st
             ))}
           </div>
         </Card>
+      )}
+
+      {data.agents.length > 0 && (
+        <OrgChart
+          team={data.team}
+          businessName={data.tenant.name}
+          onOpen={(id) => setEditing(id)}
+          onTest={onTest}
+          onHire={() => setHiring(true)}
+        />
       )}
 
       {data.agents.length === 0 && !hiring && (
