@@ -8,6 +8,7 @@ import { getRole } from "@/lib/roles";
 import { STARTER_AGENCY, STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
 import { getSession, systemStore } from "@/lib/session";
 import { SETTING_DEFS } from "@/lib/settings";
+import { sendStaffReply } from "@/lib/staffReply";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
 import type { Agent, Channel, Tenant } from "@/lib/types";
@@ -106,11 +107,7 @@ export async function staffReply(tenantId: string, conversationId: string, text:
     const { store, tenant, actor } = await ctx(tenantId);
     const conv = await store.getConversation(tenant.id, conversationId);
     if (!conv || !text.trim()) return { ok: false, error: "Write a reply first." };
-    await store.addMessage(tenant.id, { conversationId, role: "staff", content: text.trim(), meta: { by: actor } });
-    // Replying takes the chat over, so the agent doesn't talk over the team.
-    if (conv.status === "open") await store.setConversationStatus(tenant.id, conversationId, "waiting_human");
-    // n8n delivers it on the original channel (WhatsApp, email...).
-    notify(tenant, "agent_replied", { conversationId, channel: conv.channel, contact: conv.contact, reply: text.trim(), agent: actor, fromStaff: true });
+    await sendStaffReply(store, tenant, conv, text.trim(), actor);
     return { ok: true, message: "Reply sent." };
   });
 }
