@@ -36,7 +36,9 @@ export async function handleInbound(args: {
   const agent =
     (agentId ? agents.find((a) => a.id === agentId) : undefined) ??
     agents.find((a) => a.status === "live" && a.channels.includes(channel)) ??
-    agents.find((a) => a.status === "live");
+    // Back-office staff (channel "ops", like a coordinator) never answer
+    // customers, even when no one else covers this channel.
+    agents.find((a) => a.status === "live" && a.channels.some((c) => c !== "ops"));
   if (!agent) throw new InboundError("No live agent is set up for this channel.", 404);
   if (agent.status === "draft" && !args.allowDraft) throw new InboundError("This agent is not live yet.", 403);
 
