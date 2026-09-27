@@ -77,6 +77,28 @@ export type Agent = {
   updatedAt: string;
 };
 
+/**
+ * What a business pays Wally for an AI staff member (or a business-wide
+ * line), as agreed in its contract. Customer-facing; the model providers'
+ * cost to Wally lives in usage events and is never shown to the business.
+ */
+export type Contract = {
+  id: string;
+  tenantId: string;
+  agentId: string | null;
+  planName: string;
+  currency: string;
+  monthlyFee: number;
+  includedConversations: number;
+  overageRate: number;
+  setupFee: number;
+  startsOn: string;
+  endsOn: string | null;
+  status: "active" | "ended";
+  notes: string | null;
+  createdAt: string;
+};
+
 export type Channel = {
   id: string;
   tenantId: string;

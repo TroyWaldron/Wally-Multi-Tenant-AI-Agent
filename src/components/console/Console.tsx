@@ -20,12 +20,13 @@ import {
   Settings as SettingsIcon,
   BookOpen,
   LogOut,
+  Receipt,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { WallyMark } from "@/components/WallyMark";
 import type { ModelInfo } from "@/lib/agent/models";
 import type { SettingStatus } from "@/lib/settings";
-import type { Agent, Approval, AuditEntry, Channel, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
+import type { Agent, Approval, AuditEntry, Channel, Contract, Conversation, KnowledgeDoc, OutcomeEvent, RoleTemplate, Tenant, UsageEvent } from "@/lib/types";
 import { ToastProvider } from "./ui";
 import { DashboardView } from "./views/Dashboard";
 import { AgentsView } from "./views/Agents";
@@ -41,6 +42,7 @@ import { AuditView } from "./views/Audit";
 import { BusinessView } from "./views/Business";
 import { RoadmapView } from "./views/Roadmap";
 import { SettingsView } from "./views/Settings";
+import { BillingView } from "./views/Billing";
 
 type Base = {
   /** Request time (ms), so every view agrees on "now". */
@@ -69,6 +71,9 @@ export type TenantData = Base & {
   channels: Channel[];
   settings: SettingStatus[];
   monthStart: string;
+  contracts: Contract[];
+  /** Billable guest chats started this month, by agent id ("all" = whole business). */
+  billableThisMonth: Record<string, number>;
 };
 
 export type ConsoleData = (Base & { tenant: null }) | TenantData;
@@ -82,6 +87,7 @@ export type ViewId =
   | "helpdesk"
   | "knowledge"
   | "outcomes"
+  | "billing"
   | "roles"
   | "channels"
   | "audit"
@@ -131,6 +137,7 @@ function Shell({ data }: { data: ConsoleData }) {
       group: "Measure",
       items: [
         { id: "outcomes", label: "Outcomes & Spend", icon: BarChart3, needsTenant: true },
+        { id: "billing", label: "Pricing & Billing", icon: Receipt, needsTenant: true },
         { id: "audit", label: "Audit Log", icon: ScrollText, needsTenant: true },
       ],
     },
@@ -268,6 +275,7 @@ function Shell({ data }: { data: ConsoleData }) {
           {d && view === "helpdesk" && <HelpdeskView data={d} />}
           {d && view === "knowledge" && <KnowledgeView data={d} />}
           {d && view === "outcomes" && <OutcomesView data={d} />}
+          {d && view === "billing" && <BillingView data={d} />}
           {view === "roles" && <RolesView roles={data.roles} tenantId={data.tenant?.id ?? null} onHired={() => go("agents")} />}
           {d && view === "channels" && <ChannelsView data={d} />}
           {d && view === "audit" && <AuditView data={d} />}

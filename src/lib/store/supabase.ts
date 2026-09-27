@@ -7,6 +7,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Contract,
   Conversation,
   KnowledgeDoc,
   Message,
@@ -54,6 +55,23 @@ const agent = (r: Row): Agent => ({
   monthlyBudgetUsd: Number(r.monthly_budget_usd),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+});
+
+const contract = (r: Row): Contract => ({
+  id: r.id,
+  tenantId: r.tenant_id,
+  agentId: r.agent_id,
+  planName: r.plan_name,
+  currency: r.currency,
+  monthlyFee: Number(r.monthly_fee),
+  includedConversations: Number(r.included_conversations),
+  overageRate: Number(r.overage_rate),
+  setupFee: Number(r.setup_fee),
+  startsOn: r.starts_on,
+  endsOn: r.ends_on,
+  status: r.status,
+  notes: r.notes,
+  createdAt: r.created_at,
 });
 
 const channel = (r: Row): Channel => ({
@@ -271,9 +289,51 @@ export function supabaseStore(db: SupabaseClient): Store {
       return r ? channel(r) : null;
     },
 
+    async listContracts(tenantId) {
+      assertTenant(tenantId);
+      return must(await db.from("contracts").select("*").eq("tenant_id", tenantId).order("created_at")).map(contract);
+    },
+    async saveContract(tenantId, c) {
+      assertTenant(tenantId);
+      const row = {
+        tenant_id: tenantId,
+        agent_id: c.agentId,
+        plan_name: c.planName,
+        currency: c.currency,
+        monthly_fee: c.monthlyFee,
+        included_conversations: c.includedConversations,
+        overage_rate: c.overageRate,
+        setup_fee: c.setupFee,
+        starts_on: c.startsOn,
+        ends_on: c.endsOn,
+        status: c.status,
+        notes: c.notes,
+        updated_at: new Date().toISOString(),
+      };
+      if (c.id) return contract(must(await db.from("contracts").update(row).eq("tenant_id", tenantId).eq("id", c.id).select("*").single()));
+      return contract(must(await db.from("contracts").insert(row).select("*").single()));
+    },
+    async deleteContract(tenantId, id) {
+      assertTenant(tenantId);
+      must(await db.from("contracts").delete().eq("tenant_id", tenantId).eq("id", id));
+    },
+
     async listConversations(tenantId, limit = 50) {
       assertTenant(tenantId);
       return must(await db.from("conversations").select("*").eq("tenant_id", tenantId).order("updated_at", { ascending: false }).limit(limit)).map(conversation);
+    },
+    async listConversationsSince(tenantId, sinceIso) {
+      assertTenant(tenantId);
+      // Paged: the API returns at most 1,000 rows per request.
+      const rows: Row[] = [];
+      for (let from = 0; ; from += 1000) {
+        const page = must(
+          await db.from("conversations").select("id, agent_id, channel, status, created_at").eq("tenant_id", tenantId).gte("created_at", sinceIso).order("created_at").range(from, from + 999)
+        );
+        rows.push(...page);
+        if (page.length < 1000) break;
+      }
+      return rows.map((r: Row) => ({ id: r.id, agentId: r.agent_id, channel: r.channel, status: r.status, createdAt: r.created_at }));
     },
     async getConversation(tenantId, id) {
       assertTenant(tenantId);

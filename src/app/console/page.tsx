@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { isBillable } from "@/lib/billing";
 import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
 import { Console, type ConsoleData } from "@/components/console/Console";
 import { MODELS } from "@/lib/agent/models";
@@ -44,7 +45,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
 
   const monthStart = monthStartIso();
   const earliest = windowStart(now, monthStart);
-  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings] = await Promise.all([
+  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings, contracts, monthConversations] = await Promise.all([
     store.listAgents(tenant.id),
     store.listConversations(tenant.id, 150),
     store.listApprovals(tenant.id),
@@ -54,7 +55,15 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     store.listKnowledge(tenant.id),
     store.listChannels(tenant.id),
     settingsStatus(tenant.id),
+    store.listContracts(tenant.id),
+    store.listConversationsSince(tenant.id, monthStart),
   ]);
+
+  const billableThisMonth: Record<string, number> = {};
+  for (const c of monthConversations.filter(isBillable)) {
+    billableThisMonth.all = (billableThisMonth.all ?? 0) + 1;
+    if (c.agentId) billableThisMonth[c.agentId] = (billableThisMonth[c.agentId] ?? 0) + 1;
+  }
 
   // Helpdesk tickets (the business asking Wally for help) live alongside
   // guest conversations in storage but get their own page.
@@ -75,6 +84,8 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     channels,
     settings,
     monthStart,
+    contracts,
+    billableThisMonth,
   };
   return <Console data={data} />;
 }

@@ -3,6 +3,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Contract,
   Conversation,
   KnowledgeDoc,
   Message,
@@ -41,7 +42,13 @@ export interface Store {
   /** Global router lookup (not tenant-scoped by design): resolves which tenant owns an external id. */
   findChannel(kind: Channel["kind"], externalId: string): Promise<Channel | null>;
 
+  listContracts(tenantId: string): Promise<Contract[]>;
+  saveContract(tenantId: string, c: Omit<Contract, "id" | "tenantId" | "createdAt"> & { id?: string }): Promise<Contract>;
+  deleteContract(tenantId: string, id: string): Promise<void>;
+
   listConversations(tenantId: string, limit?: number): Promise<Conversation[]>;
+  /** Every conversation started since a moment (for monthly counts and billing). */
+  listConversationsSince(tenantId: string, sinceIso: string): Promise<Pick<Conversation, "id" | "agentId" | "channel" | "status" | "createdAt">[]>;
   getConversation(tenantId: string, id: string): Promise<Conversation | null>;
   findOpenConversation(tenantId: string, channel: string, contactKey: string): Promise<Conversation | null>;
   createConversation(tenantId: string, c: Pick<Conversation, "agentId" | "channel" | "contact">): Promise<Conversation>;

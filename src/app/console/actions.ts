@@ -12,7 +12,7 @@ import { sendStaffReply } from "@/lib/staffReply";
 import { helpdeskFromWally, isHelpdesk } from "@/lib/helpdesk";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
-import type { Agent, Channel, Tenant } from "@/lib/types";
+import type { Agent, Channel, Contract, Tenant } from "@/lib/types";
 
 export type ActionResult = { ok: true; message?: string; data?: unknown } | { ok: false; error: string };
 
@@ -209,6 +209,44 @@ export async function deleteChannel(tenantId: string, id: string) {
   return wrap(async () => {
     const { store, tenant } = await ctx(tenantId);
     await store.deleteChannel(tenant.id, id);
+  });
+}
+
+/* --------------------------------------------------------------- contracts */
+// Customer prices. Only the Wally team (platform admins) sets them; the
+// business sees its own agreement read-only.
+
+export async function saveContract(tenantId: string, input: Omit<Contract, "id" | "tenantId" | "createdAt"> & { id?: string }) {
+  return wrap(async () => {
+    const { session, store, tenant, actor } = await ctx(tenantId);
+    if (!session.isPlatformAdmin) return { ok: false, error: "Only the Wally team can change prices." };
+    if (!input.planName.trim()) return { ok: false, error: "Give the plan a name." };
+    const nums = [input.monthlyFee, input.includedConversations, input.overageRate, input.setupFee];
+    if (nums.some((n) => !Number.isFinite(n) || n < 0)) return { ok: false, error: "Prices and allowances can't be negative." };
+    if (input.endsOn && input.endsOn < input.startsOn) return { ok: false, error: "The end date is before the start date." };
+    const saved = await store.saveContract(tenant.id, {
+      ...input,
+      planName: input.planName.trim(),
+      currency: input.currency.trim().toUpperCase() || "USD",
+      includedConversations: Math.round(input.includedConversations),
+      notes: input.notes?.trim() || null,
+    });
+    await store.audit(tenant.id, {
+      actorType: "user",
+      actor,
+      action: input.id ? "contract.updated" : "contract.created",
+      detail: { contractId: saved.id, plan: saved.planName, monthlyFee: saved.monthlyFee, currency: saved.currency },
+    });
+    return { ok: true, message: `${saved.planName} saved.` };
+  });
+}
+
+export async function deleteContract(tenantId: string, id: string) {
+  return wrap(async () => {
+    const { session, store, tenant, actor } = await ctx(tenantId);
+    if (!session.isPlatformAdmin) return { ok: false, error: "Only the Wally team can change prices." };
+    await store.deleteContract(tenant.id, id);
+    await store.audit(tenant.id, { actorType: "user", actor, action: "contract.removed", detail: { contractId: id } });
   });
 }
 

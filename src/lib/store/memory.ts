@@ -11,6 +11,7 @@ import type {
   Approval,
   AuditEntry,
   Channel,
+  Contract,
   Conversation,
   KnowledgeDoc,
   Message,
@@ -24,6 +25,7 @@ type Db = {
   tenants: Tenant[];
   agents: Agent[];
   channels: Channel[];
+  contracts: Contract[];
   conversations: Conversation[];
   messages: Message[];
   approvals: Approval[];
@@ -59,6 +61,7 @@ function seed(): Db {
     ],
     agents: [],
     channels: [],
+    contracts: [],
     conversations: [],
     messages: [],
     approvals: [],
@@ -219,6 +222,25 @@ export const memoryStore: Store = {
     assertTenant(tenantId);
     db().channels = db().channels.filter((c) => !(c.tenantId === tenantId && c.id === id));
   },
+  async listContracts(tenantId) {
+    assertTenant(tenantId);
+    return db().contracts.filter((c) => c.tenantId === tenantId);
+  },
+  async saveContract(tenantId, input) {
+    assertTenant(tenantId);
+    const existing = input.id ? db().contracts.find((c) => c.tenantId === tenantId && c.id === input.id) : undefined;
+    if (existing) {
+      Object.assign(existing, input, { tenantId });
+      return existing;
+    }
+    const c: Contract = { ...input, id: randomUUID(), tenantId, createdAt: new Date().toISOString() };
+    db().contracts.push(c);
+    return c;
+  },
+  async deleteContract(tenantId, id) {
+    assertTenant(tenantId);
+    db().contracts = db().contracts.filter((c) => !(c.tenantId === tenantId && c.id === id));
+  },
   async findChannel(kind, externalId) {
     return db().channels.find((c) => c.kind === kind && c.externalId === externalId && c.active) ?? null;
   },
@@ -226,6 +248,10 @@ export const memoryStore: Store = {
   async listConversations(tenantId, limit = 50) {
     assertTenant(tenantId);
     return db().conversations.filter((c) => c.tenantId === tenantId).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, limit);
+  },
+  async listConversationsSince(tenantId, sinceIso) {
+    assertTenant(tenantId);
+    return db().conversations.filter((c) => c.tenantId === tenantId && c.createdAt >= sinceIso);
   },
   async getConversation(tenantId, id) {
     assertTenant(tenantId);
