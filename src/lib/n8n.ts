@@ -59,6 +59,39 @@ export function notify(tenant: Pick<Tenant, "id" | "slug" | "name">, event: N8nE
     const r = await sendEvent(tenant, event, data);
     if (!r.ok && !r.error?.startsWith("No n8n webhook URL")) console.error(`n8n ${event} failed:`, r.error ?? `HTTP ${r.status}`);
   });
+  if (needsPerson(event, data)) after(() => alertBackOffice(tenant, event, data));
+}
+
+// A guest is waiting for a person: the agent handed over, or the guest wrote
+// again while the team has the chat.
+function needsPerson(event: N8nEvent, data: Record<string, unknown>) {
+  return event === "escalated" || (event === "message_received" && data.waitingHuman === true);
+}
+
+// Tells the business's own back office (for example Sunsational's Operations
+// Hub, which then alerts staff phones). Signed with the Website relay secret.
+async function alertBackOffice(tenant: Pick<Tenant, "id">, event: N8nEvent, data: Record<string, unknown>) {
+  const [url, secret] = await Promise.all([getConfig(tenant.id, "BACKOFFICE_ALERT_URL"), getConfig(tenant.id, "WIDGET_RELAY_SECRET")]);
+  if (!url || !secret) return;
+  const approval = data.approval as { summary?: string; payload?: { contact?: unknown } } | undefined;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Wally-Relay-Secret": secret },
+      body: JSON.stringify({
+        event: event === "escalated" ? "needs_person" : "guest_message",
+        conversationId: data.conversationId,
+        channel: data.channel,
+        contact: data.contact ?? approval?.payload?.contact ?? {},
+        text: typeof data.text === "string" ? data.text.slice(0, 200) : approval?.summary?.slice(0, 200),
+        sentAt: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error(`back office alert ${event} failed: HTTP ${res.status}`);
+  } catch (err) {
+    console.error(`back office alert ${event} failed:`, err);
+  }
 }
 
 /** Runs a named workflow and returns n8n's JSON answer to the agent. */

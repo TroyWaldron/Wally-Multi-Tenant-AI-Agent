@@ -50,6 +50,14 @@ export const SETTING_DEFS: SettingDef[] = [
     help: "Only needed when the business's own website relays guest chats to Wally from its server (like the Sunsational concierge). With it, each guest gets their own message limit instead of the whole site sharing one.",
   },
   {
+    key: "BACKOFFICE_ALERT_URL",
+    label: "Back office alert URL",
+    scope: "tenant",
+    section: "knowledge",
+    secret: false,
+    help: "Optional. When a guest needs a person, Wally also tells this address (signed with the Website relay secret), so the business's own back office can alert its staff, for example on their phones.",
+  },
+  {
     key: "ANTHROPIC_API_KEY",
     label: "Anthropic API key",
     scope: "platform",
