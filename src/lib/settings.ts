@@ -38,7 +38,7 @@ export const SETTING_DEFS: SettingDef[] = [
     scope: "platform",
     section: "ai",
     secret: true,
-    help: "Powers every agent. Without it agents answer in demo mode from the knowledge base only.",
+    help: "Powers agents on Claude models. With neither this nor a DeepSeek key, agents answer in demo mode from the knowledge base only.",
     placeholder: "sk-ant-...",
   },
   {
@@ -47,7 +47,7 @@ export const SETTING_DEFS: SettingDef[] = [
     scope: "platform",
     section: "ai",
     secret: true,
-    help: "Low-cost model option in the router (wired in phase 1).",
+    help: "Low-cost model. Agents set to DeepSeek use it, and any agent uses it when no Anthropic key is set.",
   },
   {
     key: "OPENAI_API_KEY",

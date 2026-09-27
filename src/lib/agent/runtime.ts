@@ -1,9 +1,11 @@
-// The built-in agent runtime: a tool-calling loop on the Claude API with the
-// policy engine in front of every tool. OpenClaw plugs in later as a second
-// runtime behind the same runAgent() contract.
+// The built-in agent runtime: a tool-calling loop on the Claude API (or
+// DeepSeek's OpenAI-compatible API) with the policy engine in front of every
+// tool. OpenClaw plugs in later as a second runtime behind the same runAgent()
+// contract.
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessageParam, BetaTool, BetaToolResultBlockParam, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import { costUsd, getModel } from "@/lib/agent/models";
+import { runDeepSeek } from "@/lib/agent/deepseek";
+import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
 import { notify, runWorkflow } from "@/lib/n8n";
 import { getRole, renderPrompt } from "@/lib/roles";
@@ -126,10 +128,9 @@ ${b.hours ? `- Working hours: ${b.hours}` : ""}
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
 
-async function executeTool(
-  block: BetaToolUseBlock,
-  ctx: { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation }
-): Promise<ToolEvent> {
+export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation };
+
+export async function executeTool(block: { name: string; input: unknown }, ctx: ToolContext): Promise<ToolEvent> {
   const { store, tenant, agent, conversation } = ctx;
   const input = (block.input ?? {}) as Record<string, unknown>;
   const ev = (outcome: ToolEvent["outcome"], result: string): ToolEvent => ({ tool: block.name, input, outcome, result });
@@ -210,7 +211,7 @@ async function executeTool(
   }
 }
 
-function historyToMessages(history: { role: string; content: string }[]): BetaMessageParam[] {
+export function historyToMessages(history: { role: string; content: string }[]): BetaMessageParam[] {
   const out: BetaMessageParam[] = [];
   for (const m of history) {
     if (m.role !== "user" && m.role !== "assistant" && m.role !== "staff") continue;
@@ -226,7 +227,7 @@ function historyToMessages(history: { role: string; content: string }[]): BetaMe
 
 async function demoReply(store: Store, tenant: Tenant, agent: Agent, text: string): Promise<string> {
   const hits = await store.searchKnowledge(tenant.id, text, 2);
-  const intro = `(Demo mode: add an Anthropic API key in Settings for real answers.) Hi, I'm ${agent.name} from ${tenant.name}.`;
+  const intro = `(Demo mode: add an Anthropic or DeepSeek API key in Settings for real answers.) Hi, I'm ${agent.name} from ${tenant.name}.`;
   if (!hits.length) return `${intro} I couldn't find that in the knowledge base, so I'd pass it to the team.`;
   return `${intro} Here's what I found:\n\n${hits.map((h) => `• ${h.title}: ${h.content}`).join("\n")}`;
 }
@@ -266,19 +267,23 @@ export async function runAgent(args: {
     return finish({ ...empty, mode: "over_budget", reply: "Thanks for your message. A team member will get back to you shortly." });
   }
 
-  const apiKey = await getConfig(null, "ANTHROPIC_API_KEY");
-  if (!apiKey) return finish({ ...empty, mode: "demo", reply: await demoReply(store, tenant, agent, text) });
+  const keys = {
+    anthropic: await getConfig(null, "ANTHROPIC_API_KEY"),
+    deepseek: await getConfig(null, "DEEPSEEK_API_KEY"),
+  };
+  // Router: the agent's model, then its fallback, then whichever provider has
+  // a key. Providers without a key (or an adapter yet, like OpenAI) are skipped.
+  const modelOrder = [agent.model, agent.fallbackModel, "claude-haiku-4-5", "deepseek-chat"]
+    .map((id) => getModel(id))
+    .filter((m): m is ModelInfo => Boolean(m && (m.provider === "anthropic" || m.provider === "deepseek") && keys[m.provider]))
+    .filter((m, i, a) => a.findIndex((x) => x.id === m.id) === i)
+    .slice(0, 2);
+  if (!modelOrder.length) return finish({ ...empty, mode: "demo", reply: await demoReply(store, tenant, agent, text) });
 
-  // Router: only Anthropic adapters exist in phase 0; other providers use the fallback.
-  const primary = getModel(agent.model);
-  const fallbackId = getModel(agent.fallbackModel)?.provider === "anthropic" ? agent.fallbackModel! : "claude-haiku-4-5";
-  const modelOrder = primary?.provider === "anthropic" ? [agent.model, fallbackId].filter((m, i, a) => a.indexOf(m) === i) : [fallbackId];
-
-  const client = new Anthropic({ apiKey });
   const system = buildSystemPrompt(tenant, agent);
   const tools = TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name));
   const history = await store.listMessages(tenant.id, conversation.id);
-  const messages = historyToMessages(history.slice(-30));
+  const ctx = { store, tenant, agent, conversation };
 
   const toolEvents: ToolEvent[] = [];
   let inputTokens = 0;
@@ -286,57 +291,25 @@ export async function runAgent(args: {
   let reply = "";
   let usedModel: string | null = null;
 
-  for (const modelId of modelOrder) {
-    const info = getModel(modelId);
+  for (const info of modelOrder) {
     try {
-      for (let turn = 0; turn < 6; turn++) {
-        const response = await client.beta.messages.create({
-          model: modelId,
-          max_tokens: 4096,
-          system,
-          tools,
-          messages,
-          ...(info?.supportsEffort ? { output_config: { effort: agent.effort } } : {}),
-          // Opus 5: if a request is declined, the API retries it on a fallback model in the same call.
-          ...(modelId === "claude-opus-5" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-        });
-        usedModel = response.model;
-        inputTokens += response.usage.input_tokens;
-        outputTokens += response.usage.output_tokens;
-
-        if (response.stop_reason === "refusal") {
-          reply = "I can't help with that one, but I've let the team know.";
-          break;
-        }
-        const textOut = response.content
-          .filter((b) => b.type === "text")
-          .map((b) => (b as { text: string }).text)
-          .join("\n")
-          .trim();
-        const uses = response.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
-        messages.push({ role: "assistant", content: response.content });
-
-        if (response.stop_reason !== "tool_use" || uses.length === 0) {
-          reply = textOut;
-          break;
-        }
-        const results: BetaToolResultBlockParam[] = [];
-        for (const use of uses) {
-          const ev = await executeTool(use, { store, tenant, agent, conversation });
-          toolEvents.push(ev);
-          results.push({ type: "tool_result", tool_use_id: use.id, content: ev.result, is_error: ev.outcome === "error" || ev.outcome === "denied" });
-        }
-        messages.push({ role: "user", content: results });
-      }
+      const r =
+        info.provider === "deepseek"
+          ? await runDeepSeek({ apiKey: keys.deepseek!, model: info.id, system, tools, history: historyToMessages(history.slice(-30)), ctx, toolEvents })
+          : await runClaude({ apiKey: keys.anthropic!, info, system, tools, messages: historyToMessages(history.slice(-30)), ctx, toolEvents });
+      usedModel = r.model;
+      inputTokens += r.inputTokens;
+      outputTokens += r.outputTokens;
+      reply = r.reply;
       break;
     } catch (err) {
-      console.error(`Agent ${agent.name} on ${modelId} failed:`, err);
-      await store.audit(tenant.id, { actorType: "system", actor: "router", action: "model.failed", detail: { model: modelId, error: err instanceof Error ? err.message : String(err) } });
-      if (modelId === modelOrder[modelOrder.length - 1]) reply = "Sorry, I'm having trouble right now. A team member will follow up with you.";
+      console.error(`Agent ${agent.name} on ${info.id} failed:`, err);
+      await store.audit(tenant.id, { actorType: "system", actor: "router", action: "model.failed", detail: { model: info.id, error: err instanceof Error ? err.message : String(err) } });
+      if (info === modelOrder[modelOrder.length - 1]) reply = "Sorry, I'm having trouble right now. A team member will follow up with you.";
     }
   }
 
-  const cost = costUsd(usedModel ?? modelOrder[0], inputTokens, outputTokens);
+  const cost = costUsd(usedModel ?? modelOrder[0].id, inputTokens, outputTokens);
   await store.recordUsage(tenant.id, { agentId: agent.id, kind: "llm", model: usedModel, inputTokens, outputTokens, minutes: 0, costUsd: cost });
   return finish({
     reply: reply || "Thanks, the team will follow up with you shortly.",
@@ -347,4 +320,60 @@ export async function runAgent(args: {
     costUsd: cost,
     mode: "live",
   });
+}
+
+type LoopResult = { reply: string; model: string | null; inputTokens: number; outputTokens: number };
+
+async function runClaude(args: {
+  apiKey: string;
+  info: ModelInfo;
+  system: string;
+  tools: BetaTool[];
+  messages: BetaMessageParam[];
+  ctx: ToolContext;
+  toolEvents: ToolEvent[];
+}): Promise<LoopResult> {
+  const { info, system, tools, messages, ctx, toolEvents } = args;
+  const client = new Anthropic({ apiKey: args.apiKey });
+  const out: LoopResult = { reply: "", model: null, inputTokens: 0, outputTokens: 0 };
+  for (let turn = 0; turn < 6; turn++) {
+    const response = await client.beta.messages.create({
+      model: info.id,
+      max_tokens: 4096,
+      system,
+      tools,
+      messages,
+      ...(info.supportsEffort ? { output_config: { effort: ctx.agent.effort } } : {}),
+      // Opus 5: if a request is declined, the API retries it on a fallback model in the same call.
+      ...(info.id === "claude-opus-5" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
+    });
+    out.model = response.model;
+    out.inputTokens += response.usage.input_tokens;
+    out.outputTokens += response.usage.output_tokens;
+
+    if (response.stop_reason === "refusal") {
+      out.reply = "I can't help with that one, but I've let the team know.";
+      return out;
+    }
+    const textOut = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
+      .join("\n")
+      .trim();
+    const uses = response.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
+    messages.push({ role: "assistant", content: response.content });
+
+    if (response.stop_reason !== "tool_use" || uses.length === 0) {
+      out.reply = textOut;
+      return out;
+    }
+    const results: BetaToolResultBlockParam[] = [];
+    for (const use of uses) {
+      const ev = await executeTool(use, ctx);
+      toolEvents.push(ev);
+      results.push({ type: "tool_result", tool_use_id: use.id, content: ev.result, is_error: ev.outcome === "error" || ev.outcome === "denied" });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return out;
 }
