@@ -4,7 +4,7 @@
 // contract.
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessageParam, BetaTool, BetaToolResultBlockParam, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import { runDeepSeek } from "@/lib/agent/deepseek";
+import { runChatCompletions } from "@/lib/agent/chatCompletions";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
@@ -293,12 +293,13 @@ export async function runAgent(args: {
   const keys = {
     anthropic: await getConfig(null, "ANTHROPIC_API_KEY"),
     deepseek: await getConfig(null, "DEEPSEEK_API_KEY"),
+    openai: await getConfig(null, "OPENAI_API_KEY"),
   };
   // Router: the agent's model, then its fallback, then whichever provider has
-  // a key. Providers without a key (or an adapter yet, like OpenAI) are skipped.
-  const modelOrder = [agent.model, agent.fallbackModel, "claude-haiku-4-5", "deepseek-chat"]
+  // a key. Providers without a key are skipped.
+  const modelOrder = [agent.model, agent.fallbackModel, "claude-haiku-4-5", "deepseek-chat", "gpt-fallback"]
     .map((id) => getModel(id))
-    .filter((m): m is ModelInfo => Boolean(m && (m.provider === "anthropic" || m.provider === "deepseek") && keys[m.provider]))
+    .filter((m): m is ModelInfo => Boolean(m && keys[m.provider]))
     .filter((m, i, a) => a.findIndex((x) => x.id === m.id) === i)
     .slice(0, 2);
   if (!modelOrder.length) return finish({ ...empty, mode: "demo", reply: await demoReply(store, tenant, agent, text) });
@@ -319,8 +320,8 @@ export async function runAgent(args: {
   for (const info of modelOrder) {
     try {
       const r =
-        info.provider === "deepseek"
-          ? await runDeepSeek({ apiKey: keys.deepseek!, model: info.id, system, tools, history: historyToMessages(history.slice(-30)), ctx, toolEvents })
+        info.provider !== "anthropic"
+          ? await runChatCompletions({ provider: info.provider, apiKey: keys[info.provider]!, model: info.apiModel ?? info.id, system, tools, history: historyToMessages(history.slice(-30)), ctx, toolEvents })
           : await runClaude({ apiKey: keys.anthropic!, info, system, tools, messages: historyToMessages(history.slice(-30)), ctx, toolEvents });
       usedModel = r.model;
       billedAs = info.id;

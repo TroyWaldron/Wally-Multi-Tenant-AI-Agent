@@ -80,7 +80,7 @@ export const SETTING_DEFS: SettingDef[] = [
     scope: "platform",
     section: "ai",
     secret: true,
-    help: "Fallback model option in the router and speech-to-text for voice notes (wired in phase 1-2).",
+    help: "Third model provider. Agents set to OpenAI GPT use it, and the router falls back to it when Anthropic and DeepSeek are unavailable.",
   },
   {
     key: "WHATSAPP_VERIFY_TOKEN",

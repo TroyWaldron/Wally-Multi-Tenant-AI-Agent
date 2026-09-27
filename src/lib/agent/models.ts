@@ -1,6 +1,5 @@
-// LLM router catalog. Anthropic and DeepSeek models run today; OpenAI is
-// listed so agents can be configured for it, and is skipped by the router
-// until its adapter lands.
+// LLM router catalog: Anthropic, DeepSeek and OpenAI all run. `apiModel` is
+// the provider's own name for the model when it differs from our id.
 export type ModelInfo = {
   id: string;
   label: string;
@@ -9,6 +8,7 @@ export type ModelInfo = {
   outputPerM: number;
   supportsEffort: boolean;
   note: string;
+  apiModel?: string;
 };
 
 export const MODELS: ModelInfo[] = [
@@ -16,7 +16,8 @@ export const MODELS: ModelInfo[] = [
   { id: "claude-sonnet-5", label: "Claude Sonnet 5", provider: "anthropic", inputPerM: 2, outputPerM: 10, supportsEffort: true, note: "Balanced cost and quality" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "anthropic", inputPerM: 1, outputPerM: 5, supportsEffort: false, note: "Fastest, lowest cost" },
   { id: "deepseek-chat", label: "DeepSeek", provider: "deepseek", inputPerM: 0.3, outputPerM: 1.2, supportsEffort: false, note: "Lowest cost; no effort control" },
-  { id: "gpt-fallback", label: "OpenAI GPT", provider: "openai", inputPerM: 2.5, outputPerM: 10, supportsEffort: false, note: "Fallback option (phase 1)" },
+  // Id kept from the catalog's first version so agents already set to it keep working.
+  { id: "gpt-fallback", label: "OpenAI GPT-4.1 mini", provider: "openai", apiModel: "gpt-4.1-mini", inputPerM: 0.4, outputPerM: 1.6, supportsEffort: false, note: "Third provider; low cost" },
 ];
 
 export function getModel(id: string | null | undefined) {

@@ -26,7 +26,7 @@ export const FEATURES: Feature[] = [
   { area: "Runtime", name: "MCP tool connectors per tenant", phase: "P2" },
   { area: "LLM router", name: "Per-agent model, fallback model, effort, cost tracking", phase: "P0", live: true },
   { area: "LLM router", name: "DeepSeek adapter", phase: "P1", live: true },
-  { area: "LLM router", name: "OpenAI GPT adapter", phase: "P1" },
+  { area: "LLM router", name: "OpenAI GPT adapter", phase: "P1", live: true },
   { area: "Trust", name: "Decision boundaries enforced before every tool call", phase: "P0", live: true },
   { area: "Trust", name: "Approval inbox with escalation and handover", phase: "P0", live: true },
   { area: "Trust", name: "Immutable audit trail", phase: "P0", live: true },

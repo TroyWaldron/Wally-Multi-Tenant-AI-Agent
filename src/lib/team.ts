@@ -35,7 +35,7 @@ export const BACK_OFFICE = "ops";
 const LEVEL: Record<PriceTier["key"], number> = { executive: 0, manager: 1, specialist: 2, front: 2 };
 const PROVIDER_NAME = { anthropic: "Anthropic", deepseek: "DeepSeek", openai: "OpenAI" } as const;
 // Providers the router can actually call today.
-const RUNNABLE = new Set(["anthropic", "deepseek"]);
+const RUNNABLE = new Set(["anthropic", "deepseek", "openai"]);
 
 /** A back-office agent that has not checked in for this long has missed its daily round. */
 const HEARTBEAT_HOURS = 26;
@@ -63,7 +63,7 @@ export function teamOf(
     // down when no provider can run at all.
     const main = getModel(a.model)?.provider;
     if (!ready(a.model)) {
-      if (ready(a.fallbackModel) || opts.keys.anthropic || opts.keys.deepseek)
+      if (ready(a.fallbackModel) || opts.keys.anthropic || opts.keys.deepseek || opts.keys.openai)
         return { health: "up", reason: `Running on a backup model: no ${main ? PROVIDER_NAME[main] : "model"} key yet` };
       return { health: "down", reason: "No AI provider key set" };
     }

@@ -1,5 +1,5 @@
-// DeepSeek adapter: the same tool loop as Claude, over DeepSeek's
-// OpenAI-compatible chat completions API.
+// Adapter for providers that speak OpenAI's chat completions API (OpenAI
+// itself and DeepSeek): the same tool loop as Claude.
 import type { BetaMessageParam, BetaTool } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { executeTool, type ToolContext, type ToolEvent } from "@/lib/agent/runtime";
 
@@ -15,7 +15,11 @@ type Completion = {
   usage?: { prompt_tokens: number; completion_tokens: number };
 };
 
-const BASE_URL = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
+export const PROVIDERS = {
+  deepseek: { name: "DeepSeek", baseUrl: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com", maxTokensField: "max_tokens" },
+  // OpenAI's newer models only accept max_completion_tokens.
+  openai: { name: "OpenAI", baseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1", maxTokensField: "max_completion_tokens" },
+} as const;
 
 function parseArgs(raw: string): Record<string, unknown> {
   try {
@@ -26,7 +30,8 @@ function parseArgs(raw: string): Record<string, unknown> {
   }
 }
 
-export async function runDeepSeek(args: {
+export async function runChatCompletions(args: {
+  provider: keyof typeof PROVIDERS;
   apiKey: string;
   model: string;
   system: string;
@@ -42,18 +47,19 @@ export async function runDeepSeek(args: {
   ];
   const tools = args.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
   const out = { reply: "", model: null as string | null, inputTokens: 0, outputTokens: 0 };
+  const p = PROVIDERS[args.provider];
 
   for (let turn = 0; turn < 6; turn++) {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
+    const res = await fetch(`${p.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${args.apiKey}` },
-      body: JSON.stringify({ model: args.model, messages, tools, max_tokens: 4096 }),
+      body: JSON.stringify({ model: args.model, messages, tools, [p.maxTokensField]: 4096 }),
       signal: AbortSignal.timeout(60_000),
     });
-    if (!res.ok) throw new Error(`DeepSeek HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) throw new Error(`${p.name} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const data = (await res.json()) as Completion;
     const choice = data.choices?.[0];
-    if (!choice) throw new Error("DeepSeek returned no choices.");
+    if (!choice) throw new Error(`${p.name} returned no choices.`);
     out.model = data.model ?? args.model;
     out.inputTokens += data.usage?.prompt_tokens ?? 0;
     out.outputTokens += data.usage?.completion_tokens ?? 0;
