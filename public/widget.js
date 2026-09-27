@@ -51,12 +51,32 @@
       if (/^\s*\|/.test(line)) {
         var rows = [];
         while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+        rows = rows.filter(function (r) { return !/^\s*\|?[\s:|-]+\|?\s*$/.test(r); });
+        var headers = cells(rows[0] || "");
+        if (headers.length > 2) {
+          // Wide tables (price lists) become one small card per row, so a
+          // visitor on a phone never has to scroll sideways.
+          var cards = el("div", { class: "cards" });
+          rows.slice(1).forEach(function (r) {
+            var row = cells(r);
+            var card = el("div", { class: "card" });
+            card.appendChild(inline(el("div", { class: "ct" }), row[0] || ""));
+            var dl = el("dl");
+            for (var k = 1; k < row.length; k++) {
+              if (!row[k]) continue;
+              dl.appendChild(inline(el("dt"), headers[k] || ""));
+              dl.appendChild(inline(el("dd"), row[k]));
+            }
+            card.appendChild(dl);
+            cards.appendChild(card);
+          });
+          frag.appendChild(cards);
+          continue;
+        }
         var table = el("table");
-        var head = true;
         rows.forEach(function (r, n) {
-          if (/^\s*\|?[\s:|-]+\|?\s*$/.test(r)) return;
           var tr = el("tr");
-          cells(r).forEach(function (c) { tr.appendChild(inline(el(n === 0 && head ? "th" : "td"), c)); });
+          cells(r).forEach(function (c) { tr.appendChild(inline(el(n === 0 ? "th" : "td"), c)); });
           table.appendChild(tr);
         });
         var wrap = el("div", { class: "tw" });
@@ -94,7 +114,7 @@
       ".panel[hidden]{display:none}" +
       ".head{background:" + cfg.color + ";color:#fff;padding:14px 16px}.head b{display:block;font-size:15px}.head span{font-size:12px;opacity:.8}" +
       ".log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:#f6f7f9}" +
-      ".m{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}" +
+      ".m{max-width:92%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}" +
       ".a{background:#fff;color:#1d2433;border:1px solid #e3e7ee;align-self:flex-start}.u{background:" + cfg.color + ";color:#fff;align-self:flex-end}" +
       ".typing{font-size:12px;color:#6b7688;padding:0 14px 6px}" +
       ".who{font-size:10px;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin-bottom:2px}" +
@@ -102,7 +122,9 @@
       "button.send{border:0;border-radius:999px;background:" + cfg.color + ";color:#fff;padding:0 16px;font-weight:600;cursor:pointer}" +
       ".foot{font-size:10px;color:#9aa3b2;text-align:center;padding-bottom:6px}" +
       ".a{white-space:normal}.a p{margin:0 0 6px}.a p:last-child{margin-bottom:0}.a ul,.a ol{margin:0 0 6px;padding-left:18px}.a li{margin:2px 0}" +
-      ".tw{overflow-x:auto;margin:4px 0 6px}.a table{border-collapse:collapse;font-size:12.5px;min-width:100%}.a th,.a td{border-bottom:1px solid #e3e7ee;padding:5px 6px;text-align:left;vertical-align:top}.a th{background:#f3f5f8;font-weight:600;white-space:nowrap}";
+      ".tw{overflow-x:auto;margin:4px 0 6px}.a table{border-collapse:collapse;font-size:12.5px;min-width:100%}.a th,.a td{border-bottom:1px solid #e3e7ee;padding:5px 6px;text-align:left;vertical-align:top}.a th{background:#f3f5f8;font-weight:600;white-space:nowrap}" +
+      ".cards{display:grid;gap:6px;margin:4px 0 6px}.card{border:1px solid #e3e7ee;border-radius:10px;padding:7px 9px;background:#fbfcfd}.ct{font-weight:600;font-size:13.5px}" +
+      ".card dl{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;margin:3px 0 0;font-size:12.5px}.card dt{color:#6b7688}.card dd{margin:0;font-weight:500}";
     root.appendChild(style);
 
     var launch = el("button", { class: "launch", "aria-label": "Chat with " + cfg.agent.name }, "Chat with " + cfg.agent.name);
@@ -131,7 +153,8 @@
       if (role === "staff") bubble.appendChild(el("div", { class: "who" }, "Team"));
       if (role !== "user") bubble.appendChild(rich(text));
       log.appendChild(bubble);
-      log.scrollTop = log.scrollHeight;
+      // A long answer opens at its first line, so it reads top to bottom.
+      log.scrollTop = role !== "user" && bubble.offsetHeight > log.clientHeight * 0.8 ? bubble.offsetTop - log.offsetTop - 10 : log.scrollHeight;
     }
     add("assistant", cfg.welcome);
 
