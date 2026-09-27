@@ -1,0 +1,58 @@
+// The v5 feature ledger: every feature from the concept, with the phase it
+// lands in. "live" means it works in this build.
+export type Phase = "P0" | "P1" | "P2" | "P3" | "P4" | "P5";
+export type Feature = { area: string; name: string; phase: Phase; live?: boolean };
+
+export const PHASES: Record<Phase, string> = {
+  P0: "Foundation: console, tenants, agents, trust layer",
+  P1: "Sunsational receptionist on web and WhatsApp",
+  P2: "Accountant, coordinator, voice notes, ROI",
+  P3: "Voice calls, teammates, OpenClaw runtime",
+  P4: "Novate launch: billing, marketplace, insurance",
+  P5: "A2A agent mesh",
+};
+
+export const FEATURES: Feature[] = [
+  { area: "Isolation", name: "Row Level Security on every table (tenant_id / agency_id)", phase: "P0", live: true },
+  { area: "Isolation", name: "Phantom tenant guard on every server query", phase: "P0", live: true },
+  { area: "Isolation", name: "Per-tenant knowledge namespace (full-text now, pgvector column ready)", phase: "P0", live: true },
+  { area: "Isolation", name: "Service role only on the server; users get RLS-scoped JWTs", phase: "P0", live: true },
+  { area: "Agents", name: "13 leasable roles incl. accountant (receptionist to board member, MBA / PhD)", phase: "P0", live: true },
+  { area: "Agents", name: "Role templates with prompts, boundaries, personality", phase: "P0", live: true },
+  { area: "Agents", name: "Playground for testing before go-live", phase: "P0", live: true },
+  { area: "Agents", name: "Scenario tests that re-run on every change", phase: "P1" },
+  { area: "Runtime", name: "Built-in tool-calling runtime on Claude", phase: "P0", live: true },
+  { area: "Runtime", name: "OpenClaw runtime for long-running, self-hosted agents", phase: "P3" },
+  { area: "Runtime", name: "MCP tool connectors per tenant", phase: "P2" },
+  { area: "LLM router", name: "Per-agent model, fallback model, effort, cost tracking", phase: "P0", live: true },
+  { area: "LLM router", name: "DeepSeek and GPT adapters", phase: "P1" },
+  { area: "Trust", name: "Decision boundaries enforced before every tool call", phase: "P0", live: true },
+  { area: "Trust", name: "Approval inbox with escalation and handover", phase: "P0", live: true },
+  { area: "Trust", name: "Immutable audit trail", phase: "P0", live: true },
+  { area: "Trust", name: "Monthly budgets with automatic pause", phase: "P0", live: true },
+  { area: "Trust", name: "PII redaction (GDPR / HIPAA / SOC 2, T&T Data Protection Act)", phase: "P1" },
+  { area: "Trust", name: "Voice consent capture and call recording per jurisdiction", phase: "P3" },
+  { area: "Trust", name: "Shared liability framework and agent insurance API", phase: "P4" },
+  { area: "Trust", name: "Accountability feedback into policy updates", phase: "P2" },
+  { area: "Channels", name: "Website widget, one script tag, branded per tenant", phase: "P0", live: true },
+  { area: "Channels", name: "Global WhatsApp router by phone_number_id", phase: "P0", live: true },
+  { area: "Channels", name: "n8n inbound and outbound webhooks", phase: "P0", live: true },
+  { area: "Channels", name: "Email and Slack / Teams presence", phase: "P2" },
+  { area: "Channels", name: "Asana / Jira task assignment", phase: "P3" },
+  { area: "Channels", name: "Mobile app / hub and on-prem hub", phase: "P4" },
+  { area: "Voice", name: "WhatsApp and widget voice notes (STT / TTS)", phase: "P2" },
+  { area: "Voice", name: "Live WebRTC calls from the widget (LiveKit / Vapi / Freya)", phase: "P3" },
+  { area: "Voice", name: "Inbound and outbound phone calls (Twilio / Telnyx / Plivo)", phase: "P3" },
+  { area: "Voice", name: "Voice persona per role (TTS voice, pace, accent)", phase: "P3" },
+  { area: "Personality", name: "Tone sliders per agent", phase: "P0", live: true },
+  { area: "Personality", name: "Persona library with versions and A/B tests", phase: "P3" },
+  { area: "Outcomes", name: "Outcome events and per-agent spend", phase: "P0", live: true },
+  { area: "Outcomes", name: "ROI dashboard for business owners", phase: "P2" },
+  { area: "Outcomes", name: "Voice-minute metering", phase: "P3" },
+  { area: "Outcomes", name: "Hybrid pricing engine and lease billing (Stripe / WiPay)", phase: "P4" },
+  { area: "Marketplace", name: "Tenant-published templates, ratings, revenue share, persona packs", phase: "P4" },
+  { area: "Business", name: "Agency tier for Novate (white-label, client onboarding)", phase: "P4" },
+  { area: "Business", name: "Onboarding wizard and data export on offboarding", phase: "P1" },
+  { area: "A2A", name: "A2A protocol, permissioned discovery, cross-tenant negotiation", phase: "P5" },
+  { area: "A2A", name: "Inter-tenant audit trail and B2B commerce rail", phase: "P5" },
+];

@@ -1,0 +1,93 @@
+{
+  "name": "Sunsational -> Wally bridge",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sunsational-events",
+        "options": {}
+      },
+      "id": "35d31438-3bda-44b7-8d09-4c0e95d7515e",
+      "name": "Sunsational events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "8c4c25e7-3a6f-430c-bc9b-b5551e8176d9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Forwards Sunsational's own n8n events (booking_created, payment_recorded,\n// lead_created ...) to Wally so they count as outcomes and appear in the audit log.\nconst b = $input.first().json.body || {};\nreturn [{ json: { action: 'event', event: b.event, data: b.data || {} } }];"
+      },
+      "id": "e89aff54-c83f-4af0-bfe7-6fb76c14d174",
+      "name": "Shape for Wally",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://PASTE-YOUR-WALLY-DOMAIN/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Wally-Tenant",
+              "value": "sunsational-tobago"
+            },
+            {
+              "name": "X-Wally-Secret",
+              "value": "PASTE_THE_SHARED_SECRET_FROM_WALLY_SETTINGS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a8884218-8876-4798-baa1-c5a8f85ad655",
+      "name": "Send to Wally",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Sunsational events": {
+      "main": [
+        [
+          {
+            "node": "Shape for Wally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape for Wally": {
+      "main": [
+        [
+          {
+            "node": "Send to Wally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

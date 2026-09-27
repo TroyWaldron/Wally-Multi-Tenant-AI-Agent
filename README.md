@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wally
 
-## Getting Started
+Leased AI staff for small businesses. A business "hires" a receptionist,
+accountant, coordinator or any of 13 roles; each agent works on the website,
+WhatsApp and (later) the phone, inside decision boundaries the owner sets,
+with every action logged and every sensitive action sent for approval.
 
-First, run the development server:
+Client zero is **Sunsational Tobago**. Novate Solutions is the agency that
+sells it. The full concept and roadmap live in the console under **Roadmap**
+and in the [concept review](https://claude.ai/artifact/R57owMEKTyAsDtuuzqCaC3).
+
+## Stack
+
+- **Next.js 16** (App Router) + Tailwind v4, deployed on **Vercel**
+- **Supabase** Postgres with Row Level Security on every table, Supabase Auth
+- **Claude API** for the agent runtime, with per-agent model, fallback and budget
+- **n8n** for delivery and integrations (WhatsApp sends, owner alerts,
+  Sunsational availability and enquiries)
+
+## Run it locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. With no Supabase keys the app runs in **demo
+mode**: data lives in memory, seeded with Sunsational Tobago, three agents
+and its FAQ. Add `ANTHROPIC_API_KEY` to `.env.local` (or in Settings) and the
+agents answer for real in the Playground.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Go live
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See [docs/SETUP.md](docs/SETUP.md) for the Supabase, Vercel, n8n and
+WhatsApp steps.
 
-## Learn More
+## Map of the code
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Path | What it is |
+| --- | --- |
+| `supabase/migrations/` | Schema, RLS policies, append-only audit log, knowledge search |
+| `src/lib/roles.ts` | The role library: prompts, default boundaries and personalities |
+| `src/lib/agent/runtime.ts` | Agent loop: tools, model fallback, usage metering |
+| `src/lib/agent/policy.ts` | Decision boundaries checked before every tool call |
+| `src/lib/agent/inbound.ts` | One pipeline for every channel |
+| `src/lib/store/` | Data access (Supabase and in-memory demo), with the phantom tenant guard |
+| `src/app/api/webhooks/` | n8n inbound and the global WhatsApp router |
+| `src/app/api/widget/` + `public/widget.js` | The one-line website widget |
+| `src/components/console/` | The admin console |
+| `n8n/` | Importable n8n workflows |

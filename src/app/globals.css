@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Wally console palette: deep ink sidebar, lagoon teal for action, amber for
+   attention. Same bones as the Sunsational ops hub, its own identity. */
+@theme {
+  --color-ink: #13233a;
+  --color-ink-deep: #0b1727;
+  --color-lagoon: #1c7f7a;
+  --color-lagoon-deep: #145f5b;
+  --color-amber: #d9a13b;
+  --color-amber-light: #f1d9a6;
+  --color-paper: #f5f6f8;
+  --color-slate: #2f3542;
+  --color-leaf: #4c8a47;
+  --color-coral: #d2603f;
+
+  --font-heading: var(--font-sora), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-figtree), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-slate);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-lagoon);
+  outline-offset: 2px;
+}
+
+input[type="range"] {
+  accent-color: var(--color-lagoon);
 }

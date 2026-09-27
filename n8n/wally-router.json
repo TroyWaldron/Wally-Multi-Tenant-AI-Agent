@@ -1,0 +1,563 @@
+{
+  "name": "Wally router (Sunsational Tobago)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wally-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "564f20b6-c3a0-4c32-b2d8-7daf1a0acbc5",
+      "name": "Wally events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "3167c474-0550-46ee-b391-7dc4e61ffa15"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wally -> n8n router. Paste the same shared secret you saved in\n// Wally > Settings > n8n, and your own values below.\nconst WALLY_SECRET = 'PASTE_THE_SHARED_SECRET_FROM_WALLY_SETTINGS';\n\nconst req = $input.first().json;\nconst body = req.body || {};\nconst headers = req.headers || {};\nlet route = 'unauthorized';\n\nif (headers['x-wally-secret'] === WALLY_SECRET) {\n  if (body.kind === 'workflow') {\n    route = ['check_availability', 'create_enquiry'].includes(body.workflow) ? body.workflow : 'unknown_workflow';\n  } else if (body.event === 'agent_replied' && body.data?.channel === 'whatsapp' && body.data?.contact?.phone) {\n    route = 'whatsapp_reply';\n  } else if (['approval_requested', 'escalated', 'budget_exceeded'].includes(body.event)) {\n    route = 'notify_owner';\n  } else {\n    route = 'other_event';\n  }\n}\nreturn [{ json: { route, ...body } }];"
+      },
+      "id": "f0804180-6df9-4c74-89d9-e795c1bf7853",
+      "name": "Verify & route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "8972c453-7547-4ca0-baf4-9755da78624b",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "unauthorized",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "unauthorized"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "1ea7ea31-8d34-4b39-9733-74606ef59fcc",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "check_availability",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "check_availability"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "ab9bc042-c976-4a41-bf2c-49651c241903",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "create_enquiry",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create_enquiry"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c4c493e9-2da8-48cb-b6d0-50de8c169709",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "whatsapp_reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "whatsapp_reply"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c1ca017f-b2b2-49ec-b3ec-cd14acd8700a",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "notify_owner",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "notify_owner"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "50977dfc-7823-48be-b47c-df243b3fa9e2",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "other_event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "other_event"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unknown_workflow"
+        }
+      },
+      "id": "9910f2a0-c093-43c9-a5e6-04aad3829282",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"Bad secret\" } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "185dc215-c27b-4a31-9a2f-6ed44b2a1cd4",
+      "name": "Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.sunsationaltobago.com/api/availability?villa={{ $json.input.villa }}",
+        "options": {}
+      },
+      "id": "625f8411-a8ef-401f-afec-135b04039a8d",
+      "name": "Get Sunsational availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sunsational returns the villa's booked ranges; work out whether the\n// requested stay overlaps any of them.\nconst input = $('Verify & route').first().json.input || {};\nconst blocked = $input.first().json.blocked || [];\nconst ci = input.check_in, co = input.check_out;\nif (!ci || !co) {\n  return [{ json: { ok: false, message: 'Ask the guest for check-in and check-out dates (YYYY-MM-DD).' } }];\n}\nconst clashes = blocked.filter(r => ci < r.checkOut && co > r.checkIn);\nreturn [{ json: {\n  ok: true,\n  villa: input.villa,\n  check_in: ci,\n  check_out: co,\n  available: clashes.length === 0,\n  clashes,\n  note: clashes.length ? 'Those dates are taken. Offer nearby dates or another villa.' : 'Free. Offer to create an enquiry so the team can confirm and send the invoice.'\n} }];"
+      },
+      "id": "f7c82bc1-2e95-454e-ab1f-da12c65cd9d0",
+      "name": "Check dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "63d4509e-a31f-4d52-8212-ebf8bbd63a01",
+      "name": "Reply availability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.sunsationaltobago.com/api/inquiries",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.input.name, email: $json.input.email, phone: $json.input.phone || '', villaSlug: $json.input.villa || 'general', checkIn: $json.input.check_in || '', checkOut: $json.input.check_out || '', guests: $json.input.guests, message: 'Created by Wally (' + $json.context.agent + ')' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "08d36607-6788-4562-90db-6b6fd3aec1b5",
+      "name": "Create Sunsational enquiry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "6975fe83-d00f-4583-8688-1ec9101c339f",
+      "name": "Reply enquiry",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/PASTE_PHONE_NUMBER_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.data.contact.phone, type: 'text', text: { body: $json.data.reply } }) }}",
+        "options": {}
+      },
+      "id": "58e9938d-6ec4-4f12-8dbf-d6e60a9c6105",
+      "name": "Send WhatsApp reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "5ecd7dd9-a713-4f8a-ad90-069c05608a5a",
+      "name": "Ack reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds a short WhatsApp text for the owner. Free-form WhatsApp messages\n// only deliver inside Meta's 24-hour window; outside it, switch the HTTP\n// node to an approved template.\nconst OWNER_WHATSAPP = 'PASTE_OWNER_NUMBER_E164_NO_PLUS';  // e.g. 18687825152\nconst b = $input.first().json;\nconst a = b.data?.approval;\nconst text = b.event === 'budget_exceeded'\n  ? `Wally: ${b.data.agent} hit its monthly budget and paused.`\n  : `Wally needs you (${b.tenant?.name}): ${a?.summary ?? 'a conversation was handed over'}. Open the Approvals inbox to decide.`;\nreturn [{ json: { to: OWNER_WHATSAPP, text } }];"
+      },
+      "id": "f1343bd3-e528-48cf-8160-ac7ac7f63354",
+      "name": "Owner message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/PASTE_PHONE_NUMBER_ID/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.to, type: 'text', text: { body: $json.text } }) }}",
+        "options": {}
+      },
+      "id": "97903161-1137-4a04-9905-184f4f8ce87d",
+      "name": "Send WhatsApp to owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "32bd6601-e31f-448c-9cc7-bb71934b9508",
+      "name": "Ack owner",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"event\": $json.event } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "3b846493-ad74-4e0c-8084-5d44511c8854",
+      "name": "Ack event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": false, \"message\": \"This workflow is not built in n8n yet. Tell the customer the team will follow up.\" } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "280e9d24-67d3-4176-82aa-0d8b5028173e",
+      "name": "Unknown workflow",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "Wally events": {
+      "main": [
+        [
+          {
+            "node": "Verify & route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify & route": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Reject",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Sunsational availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Sunsational enquiry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send WhatsApp reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Owner message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ack event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sunsational availability": {
+      "main": [
+        [
+          {
+            "node": "Check dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check dates": {
+      "main": [
+        [
+          {
+            "node": "Reply availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Sunsational enquiry": {
+      "main": [
+        [
+          {
+            "node": "Reply enquiry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp reply": {
+      "main": [
+        [
+          {
+            "node": "Ack reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner message": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp to owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp to owner": {
+      "main": [
+        [
+          {
+            "node": "Ack owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
