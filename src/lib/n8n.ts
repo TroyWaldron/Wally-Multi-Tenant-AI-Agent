@@ -6,7 +6,8 @@
 // Both carry X-Wally-Secret so the workflow's first node can reject forgeries.
 import { after } from "next/server";
 import { getConfig } from "@/lib/settings";
-import type { Tenant } from "@/lib/types";
+import { alertSlack } from "@/lib/slack";
+import type { Conversation, Tenant } from "@/lib/types";
 
 export const N8N_EVENTS = [
   { event: "conversation_started", when: "A new conversation opens on any channel" },
@@ -59,7 +60,10 @@ export function notify(tenant: Pick<Tenant, "id" | "slug" | "name">, event: N8nE
     const r = await sendEvent(tenant, event, data);
     if (!r.ok && !r.error?.startsWith("No n8n webhook URL")) console.error(`n8n ${event} failed:`, r.error ?? `HTTP ${r.status}`);
   });
-  if (needsPerson(event, data)) after(() => alertBackOffice(tenant, event, data));
+  if (needsPerson(event, data)) {
+    after(() => alertBackOffice(tenant, event, data));
+    if (data.conversationId) after(() => alertSlack(tenant, event === "escalated" ? "needs_person" : "guest_message", slackAlertOf(data)).catch((err) => console.error("slack alert failed", err)));
+  }
 }
 
 // A guest is waiting for a person: the agent handed over, or the guest wrote
@@ -92,6 +96,17 @@ async function alertBackOffice(tenant: Pick<Tenant, "id">, event: N8nEvent, data
   } catch (err) {
     console.error(`back office alert ${event} failed:`, err);
   }
+}
+
+function slackAlertOf(data: Record<string, unknown>) {
+  const approval = data.approval as { summary?: string; payload?: { contact?: Conversation["contact"] } } | undefined;
+  const contact = ((data.contact as Conversation["contact"] | undefined) ?? approval?.payload?.contact ?? {}) as Conversation["contact"];
+  return {
+    conversationId: String(data.conversationId ?? ""),
+    channel: typeof data.channel === "string" ? data.channel : undefined,
+    who: contact.name || contact.phone || contact.email,
+    text: typeof data.text === "string" ? data.text.slice(0, 300) : approval?.summary?.slice(0, 300),
+  };
 }
 
 /** Runs a named workflow and returns n8n's JSON answer to the agent. */

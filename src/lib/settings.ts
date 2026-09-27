@@ -8,7 +8,7 @@ export type SettingDef = {
   key: string;
   label: string;
   scope: "tenant" | "platform";
-  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "roi";
+  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "slack" | "roi";
   secret: boolean;
   help: string;
   placeholder?: string;
@@ -97,6 +97,31 @@ export const SETTING_DEFS: SettingDef[] = [
     section: "whatsapp",
     secret: true,
     help: "Used to verify Meta's X-Hub-Signature-256 on incoming WhatsApp webhooks.",
+  },
+  {
+    key: "SLACK_BOT_TOKEN",
+    label: "Slack bot token",
+    scope: "tenant",
+    section: "slack",
+    secret: true,
+    help: "Bot User OAuth Token (starts xoxb-) from the Slack app's OAuth & Permissions page.",
+  },
+  {
+    key: "SLACK_SIGNING_SECRET",
+    label: "Slack signing secret",
+    scope: "tenant",
+    section: "slack",
+    secret: true,
+    help: "From the Slack app's Basic Information page. Proves events really come from Slack.",
+  },
+  {
+    key: "SLACK_ALERT_CHANNEL",
+    label: "Alert channel ID",
+    scope: "tenant",
+    section: "slack",
+    secret: false,
+    help: "Where 'a guest needs a person' is posted. In Slack, open the channel's details: the ID is at the bottom (starts with C). Invite the app to it first.",
+    placeholder: "C0123456789",
   },
   {
     key: "ROI_MINUTES_PER_CHAT",

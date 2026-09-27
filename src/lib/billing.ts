@@ -42,7 +42,8 @@ export const SUGGESTED_PLAN = suggestedPlan("receptionist", "Receptionist");
 
 /** Conversations a business is billed for: real guests, not tests or helpdesk tickets. */
 export function isBillable(c: Pick<Conversation, "channel">) {
-  return c.channel !== "playground" && c.channel !== HELPDESK_CHANNEL;
+  // Slack chats are the team talking to its own AI staff, not customers.
+  return c.channel !== "playground" && c.channel !== HELPDESK_CHANNEL && c.channel !== "slack";
 }
 
 /** Whether a contract applies on a given day (ISO date or timestamp). */
