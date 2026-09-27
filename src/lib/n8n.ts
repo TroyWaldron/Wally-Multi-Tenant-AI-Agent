@@ -6,6 +6,7 @@
 // Both carry X-Wally-Secret so the workflow's first node can reject forgeries.
 import { after } from "next/server";
 import { getConfig } from "@/lib/settings";
+import { approvalLink } from "@/lib/approvalLinks";
 import { alertSlack, postApprovalToSlack } from "@/lib/slack";
 import type { Conversation, Tenant } from "@/lib/types";
 
@@ -56,14 +57,18 @@ export function sendEvent(tenant: Pick<Tenant, "id" | "slug" | "name">, event: N
 
 /** Sends after the response so a slow n8n never delays a guest's reply. */
 export function notify(tenant: Pick<Tenant, "id" | "slug" | "name">, event: N8nEvent, data: Record<string, unknown>) {
+  const approval = data.approval as { id?: string; kind?: string; summary?: string; action?: string } | undefined;
+  // A one-tap review link rides along, so n8n can put it in an email or WhatsApp message.
+  const reviewUrl = event === "approval_requested" && approval?.id && approval.kind === "action" ? approvalLink(tenant.id, approval.id) : null;
+  if (reviewUrl) data = { ...data, reviewUrl };
   after(async () => {
     const r = await sendEvent(tenant, event, data);
     if (!r.ok && !r.error?.startsWith("No n8n webhook URL")) console.error(`n8n ${event} failed:`, r.error ?? `HTTP ${r.status}`);
   });
-  const approval = data.approval as { id?: string; kind?: string; summary?: string; action?: string } | undefined;
   if (event === "approval_requested" && approval?.id && approval.kind === "action") {
     const a = { id: approval.id, summary: approval.summary ?? "", action: approval.action ?? "" };
     after(() => postApprovalToSlack(tenant, a).catch((err) => console.error("slack approval failed", err)));
+    if (reviewUrl) after(() => alertBackOffice(tenant, event, { ...data, reviewUrl }));
   }
   if (needsPerson(event, data)) {
     after(() => alertBackOffice(tenant, event, data));
@@ -88,7 +93,8 @@ async function alertBackOffice(tenant: Pick<Tenant, "id">, event: N8nEvent, data
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Wally-Relay-Secret": secret },
       body: JSON.stringify({
-        event: event === "escalated" ? "needs_person" : "guest_message",
+        event: event === "approval_requested" ? "approval_needed" : event === "escalated" ? "needs_person" : "guest_message",
+        reviewUrl: data.reviewUrl,
         conversationId: data.conversationId,
         channel: data.channel,
         contact: data.contact ?? approval?.payload?.contact ?? {},
