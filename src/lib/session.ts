@@ -46,6 +46,9 @@ export function systemStore(): Store {
 export async function getSession(): Promise<Session | null> {
   if (!isSupabaseConfigured()) {
     const password = process.env.ADMIN_PASSWORD;
+    // A hosted deploy without Supabase or a password stays locked rather than
+    // serving an open console to the internet.
+    if (!password && process.env.VERCEL) return null;
     if (password) {
       const jar = await cookies();
       if (jar.get(DEMO_COOKIE)?.value !== demoToken(password)) return null;
