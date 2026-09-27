@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, Plus, Search, Trash2 } from "lucide-react";
-import { addKnowledge, deleteKnowledge, testKnowledgeSearch } from "@/app/console/actions";
+import { BookOpen, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { addKnowledge, deleteKnowledge, syncKnowledgeNow, testKnowledgeSearch } from "@/app/console/actions";
+import { SYNC_SOURCE } from "@/lib/knowledgeSource";
 import type { TenantData } from "../Console";
 import { Button, Card, cardClass, Field, inputClass, SectionTitle, useAction } from "../ui";
 
@@ -13,6 +14,8 @@ export function KnowledgeView({ data }: { data: TenantData }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<{ id: string; title: string }[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const feed = data.settings.find((f) => f.key === "KNOWLEDGE_SYNC_URL");
+  const synced = data.knowledge.filter((k) => k.source === SYNC_SOURCE).length;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -25,7 +28,7 @@ export function KnowledgeView({ data }: { data: TenantData }) {
                 <button onClick={() => setOpen(open === k.id ? null : k.id)} className="text-left text-sm font-semibold text-ink hover:text-lagoon">{k.title}</button>
                 <button onClick={() => run(() => deleteKnowledge(data.tenant.id, k.id))} className="shrink-0 text-ink/30 hover:text-coral" aria-label={`Delete ${k.title}`}><Trash2 className="h-4 w-4" /></button>
               </div>
-              <div className="text-[11px] text-slate/45">{k.source}</div>
+              <div className="text-[11px] text-slate/45">{k.source === SYNC_SOURCE ? "From your website" : k.source}</div>
               {open === k.id && <p className="mt-2 whitespace-pre-wrap text-sm text-slate/75">{k.content}</p>}
             </div>
           ))}
@@ -33,6 +36,18 @@ export function KnowledgeView({ data }: { data: TenantData }) {
         </div>
       </div>
       <div className="flex flex-col gap-6">
+        <Card title="Sync from your website">
+          {feed?.configured ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-slate/70">
+                {synced} articles come from <span className="break-all font-medium text-ink">{feed.value}</span>. Wally refreshes them every day; edit them on your website, not here.
+              </p>
+              <Button variant="secondary" disabled={pending} onClick={() => run(() => syncKnowledgeNow(data.tenant.id))}><RefreshCw className="h-4 w-4" /> Sync now</Button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate/70">Add your website&apos;s knowledge feed in Settings and Wally will keep these articles up to date on its own.</p>
+          )}
+        </Card>
         <Card title="Add an article">
           <form
             className="flex flex-col gap-3"
@@ -58,7 +73,7 @@ export function KnowledgeView({ data }: { data: TenantData }) {
             </ol>
           )}
         </Card>
-        <p className="text-xs text-slate/50">Coming next: upload PDFs and crawl your website into this list, with semantic (vector) search per business.</p>
+        <p className="text-xs text-slate/50">Coming next: upload PDFs into this list, with semantic (vector) search per business.</p>
       </div>
     </div>
   );

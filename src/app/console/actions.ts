@@ -8,6 +8,7 @@ import { getRole } from "@/lib/roles";
 import { STARTER_AGENCY, STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } from "@/lib/seed/starter";
 import { getSession, systemStore } from "@/lib/session";
 import { SETTING_DEFS } from "@/lib/settings";
+import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
 import type { Agent, Channel, Tenant } from "@/lib/types";
 
@@ -142,6 +143,15 @@ export async function deleteKnowledge(tenantId: string, id: string) {
     const { store, tenant, actor } = await ctx(tenantId);
     await store.deleteKnowledge(tenant.id, id);
     await store.audit(tenant.id, { actorType: "user", actor, action: "knowledge.removed", detail: { id } });
+  });
+}
+
+export async function syncKnowledgeNow(tenantId: string) {
+  return wrap(async () => {
+    const { tenant } = await ctx(tenantId);
+    const r = await syncKnowledge(tenant);
+    if (!r.ok) return r;
+    return { ok: true, message: `Synced ${r.imported} articles from the website.` };
   });
 }
 

@@ -7,6 +7,7 @@ import type { BetaMessageParam, BetaTool, BetaToolResultBlockParam, BetaToolUseB
 import { runDeepSeek } from "@/lib/agent/deepseek";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso } from "@/lib/agent/policy";
+import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { notify, runWorkflow } from "@/lib/n8n";
 import { getRole, renderPrompt } from "@/lib/roles";
 import { getConfig } from "@/lib/settings";
@@ -302,6 +303,7 @@ export async function runAgent(args: {
     .slice(0, 2);
   if (!modelOrder.length) return finish({ ...empty, mode: "demo", reply: await demoReply(store, tenant, agent, text) });
 
+  await syncKnowledgeIfStale(tenant);
   const system = buildSystemPrompt(tenant, agent);
   const tools = TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name));
   const history = await store.listMessages(tenant.id, conversation.id);

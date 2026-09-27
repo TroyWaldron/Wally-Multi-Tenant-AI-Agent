@@ -8,7 +8,7 @@ export type SettingDef = {
   key: string;
   label: string;
   scope: "tenant" | "platform";
-  section: "n8n" | "ai" | "whatsapp";
+  section: "n8n" | "knowledge" | "ai" | "whatsapp";
   secret: boolean;
   help: string;
   placeholder?: string;
@@ -31,6 +31,15 @@ export const SETTING_DEFS: SettingDef[] = [
     section: "n8n",
     secret: true,
     help: "Sent as the X-Wally-Secret header on every call to n8n, and required on every call n8n makes back to Wally for this business.",
+  },
+  {
+    key: "KNOWLEDGE_SYNC_URL",
+    label: "Website knowledge feed",
+    scope: "tenant",
+    section: "knowledge",
+    secret: false,
+    help: "A URL on the business's own site that returns its FAQ and descriptions as JSON. Wally re-imports it daily (and from Knowledge > Sync now), so agents never work from an old copy.",
+    placeholder: "https://www.example.com/api/public/knowledge",
   },
   {
     key: "ANTHROPIC_API_KEY",
