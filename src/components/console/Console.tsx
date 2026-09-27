@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   Library,
   Map,
+  LifeBuoy,
   Menu,
   MessageSquareText,
   Plug,
@@ -30,6 +31,7 @@ import { DashboardView } from "./views/Dashboard";
 import { AgentsView } from "./views/Agents";
 import { PlaygroundView } from "./views/Playground";
 import { ApprovalsView } from "./views/Approvals";
+import { HelpdeskView } from "./views/Helpdesk";
 import { ConversationsView } from "./views/Conversations";
 import { KnowledgeView } from "./views/Knowledge";
 import { OutcomesView } from "./views/Outcomes";
@@ -58,6 +60,7 @@ export type TenantData = Base & {
   tenant: Tenant;
   agents: Agent[];
   conversations: Conversation[];
+  helpdesk: Conversation[];
   approvals: Approval[];
   audit: AuditEntry[];
   outcomes: OutcomeEvent[];
@@ -76,6 +79,7 @@ export type ViewId =
   | "playground"
   | "approvals"
   | "conversations"
+  | "helpdesk"
   | "knowledge"
   | "outcomes"
   | "roles"
@@ -102,6 +106,7 @@ function Shell({ data }: { data: ConsoleData }) {
   const d = data.tenant ? (data as TenantData) : null;
   const pending = d?.approvals.filter((a) => a.status === "pending").length ?? 0;
   const waiting = d?.conversations.filter((c) => c.status === "waiting_human").length ?? 0;
+  const helpWaiting = d?.helpdesk.filter((c) => c.status === "waiting_human").length ?? 0;
 
   const NAV: { group: string; items: { id: ViewId; label: string; icon: typeof LayoutGrid; badge?: number; needsTenant?: boolean }[] }[] = [
     {
@@ -133,6 +138,7 @@ function Shell({ data }: { data: ConsoleData }) {
       group: "Admin",
       items: [
         { id: "business", label: "Business", icon: Building2 },
+        { id: "helpdesk", label: "Helpdesk", icon: LifeBuoy, badge: helpWaiting, needsTenant: true },
         { id: "roadmap", label: "Roadmap", icon: Map },
         { id: "settings", label: "Settings", icon: SettingsIcon, needsTenant: true },
       ],
@@ -259,6 +265,7 @@ function Shell({ data }: { data: ConsoleData }) {
           {d && view === "playground" && <PlaygroundView data={d} initialAgentId={playAgent} />}
           {d && view === "approvals" && <ApprovalsView data={d} />}
           {d && view === "conversations" && <ConversationsView data={d} />}
+          {d && view === "helpdesk" && <HelpdeskView data={d} />}
           {d && view === "knowledge" && <KnowledgeView data={d} />}
           {d && view === "outcomes" && <OutcomesView data={d} />}
           {view === "roles" && <RolesView roles={data.roles} tenantId={data.tenant?.id ?? null} onHired={() => go("agents")} />}

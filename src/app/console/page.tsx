@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
 import { Console, type ConsoleData } from "@/components/console/Console";
 import { MODELS } from "@/lib/agent/models";
 import { monthStartIso } from "@/lib/agent/policy";
@@ -43,9 +44,9 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
 
   const monthStart = monthStartIso();
   const earliest = windowStart(now, monthStart);
-  const [agents, conversations, approvals, audit, outcomes, usage, knowledge, channels, settings] = await Promise.all([
+  const [agents, allConversations, approvals, audit, outcomes, usage, knowledge, channels, settings] = await Promise.all([
     store.listAgents(tenant.id),
-    store.listConversations(tenant.id, 100),
+    store.listConversations(tenant.id, 150),
     store.listApprovals(tenant.id),
     store.listAudit(tenant.id, 150),
     store.listOutcomes(tenant.id, 300),
@@ -55,11 +56,17 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     settingsStatus(tenant.id),
   ]);
 
+  // Helpdesk tickets (the business asking Wally for help) live alongside
+  // guest conversations in storage but get their own page.
+  const conversations = allConversations.filter((c) => c.channel !== HELPDESK_CHANNEL);
+  const helpdesk = allConversations.filter((c) => c.channel === HELPDESK_CHANNEL);
+
   const data: ConsoleData = {
     ...base,
     tenant,
     agents,
     conversations,
+    helpdesk,
     approvals,
     audit,
     outcomes,

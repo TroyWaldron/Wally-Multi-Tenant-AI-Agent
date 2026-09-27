@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
 import { partnerContext } from "@/lib/partnerAuth";
 import { sendStaffReply } from "@/lib/staffReply";
 
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if ("error" in ctx) return ctx.error;
   const { id } = await params;
   const conv = await ctx.store.getConversation(ctx.tenant.id, id);
-  if (!conv) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!conv || conv.channel === HELPDESK_CHANNEL) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const messages = (await ctx.store.listMessages(ctx.tenant.id, conv.id))
     .filter((m) => m.role !== "tool")
     .map((m) => ({ id: m.id, role: m.role, content: m.content, by: m.role === "staff" ? String(m.meta.by ?? "") : undefined, createdAt: m.createdAt }));
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   const { id } = await params;
   const conv = await ctx.store.getConversation(ctx.tenant.id, id);
-  if (!conv) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!conv || conv.channel === HELPDESK_CHANNEL) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const b = parsed.data;
   if (b.action === "reply") {

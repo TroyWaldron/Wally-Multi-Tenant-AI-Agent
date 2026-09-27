@@ -9,6 +9,7 @@ import { STARTER_AGENCY, STARTER_AGENTS, STARTER_KNOWLEDGE, STARTER_TENANT } fro
 import { getSession, systemStore } from "@/lib/session";
 import { SETTING_DEFS } from "@/lib/settings";
 import { sendStaffReply } from "@/lib/staffReply";
+import { helpdeskFromWally, isHelpdesk } from "@/lib/helpdesk";
 import { syncKnowledge } from "@/lib/knowledgeSync";
 import { isSupabaseConfigured, serviceClient } from "@/lib/supabase";
 import type { Agent, Channel, Tenant } from "@/lib/types";
@@ -108,6 +109,16 @@ export async function staffReply(tenantId: string, conversationId: string, text:
     const conv = await store.getConversation(tenant.id, conversationId);
     if (!conv || !text.trim()) return { ok: false, error: "Write a reply first." };
     await sendStaffReply(store, tenant, conv, text.trim(), actor);
+    return { ok: true, message: "Reply sent." };
+  });
+}
+
+export async function helpdeskReply(tenantId: string, ticketId: string, text: string) {
+  return wrap(async () => {
+    const { store, tenant, actor } = await ctx(tenantId);
+    const ticket = await store.getConversation(tenant.id, ticketId);
+    if (!isHelpdesk(ticket) || !text.trim()) return { ok: false, error: "Write a reply first." };
+    await helpdeskFromWally(store, tenant.id, ticket, text.trim(), actor);
     return { ok: true, message: "Reply sent." };
   });
 }
