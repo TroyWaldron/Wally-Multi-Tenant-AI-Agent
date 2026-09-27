@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CORS_HEADERS } from "@/lib/cors";
 import { systemStore } from "@/lib/session";
+import { voiceKey } from "@/lib/transcribe";
 
 export function OPTIONS() {
   return new NextResponse(null, { headers: CORS_HEADERS });
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
       color: tenant.branding.color ?? "#1c7f7a",
       welcome: tenant.branding.welcome ?? `Hi, how can ${tenant.name} help?`,
       position: tenant.branding.position ?? "right",
+      voice: Boolean(await voiceKey(tenant.id)),
     },
     { headers: CORS_HEADERS }
   );

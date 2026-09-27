@@ -119,6 +119,7 @@
       ".typing{font-size:12px;color:#6b7688;padding:0 14px 6px}" +
       ".who{font-size:10px;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin-bottom:2px}" +
       "form{display:flex;gap:8px;padding:10px;border-top:1px solid #e3e7ee}input{flex:1;border:1px solid #d5dbe4;border-radius:999px;padding:10px 14px;font-size:14px;outline:none}input:focus{border-color:" + cfg.color + "}" +
+      "button.mic{border:1px solid #d5dbe4;border-radius:999px;background:#fff;color:#1d2433;width:40px;flex:none;cursor:pointer;font-size:16px}button.mic.rec{background:#e5484d;border-color:#e5484d;color:#fff}" +
       "button.send{border:0;border-radius:999px;background:" + cfg.color + ";color:#fff;padding:0 16px;font-weight:600;cursor:pointer}" +
       ".foot{font-size:10px;color:#9aa3b2;text-align:center;padding-bottom:6px}" +
       ".a{white-space:normal}.a p{margin:0 0 6px}.a p:last-child{margin-bottom:0}.a ul,.a ol{margin:0 0 6px;padding-left:18px}.a li{margin:2px 0}" +
@@ -139,6 +140,11 @@
     var input = el("input", { type: "text", placeholder: "Type your message…", "aria-label": "Message", maxlength: "2000" });
     var send = el("button", { class: "send", type: "submit" }, "Send");
     form.appendChild(input);
+    // Voice notes: shown only when the business has speech to text switched
+    // on and the browser can record. Tap to start, tap again to send.
+    var canRecord = cfg.voice && window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+    var mic = canRecord ? el("button", { class: "mic", type: "button", "aria-label": "Record a voice note", title: "Record a voice note" }, "\uD83C\uDFA4") : null;
+    if (mic) form.appendChild(mic);
     form.appendChild(send);
     panel.appendChild(head);
     panel.appendChild(log);
@@ -164,6 +170,45 @@
     });
 
     var busy = false;
+    var recorder = null, chunks = [], stopTimer = null;
+    if (mic) mic.addEventListener("click", function () {
+      if (recorder) return recorder.stop();
+      if (busy) return;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        chunks = [];
+        recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+        recorder.onstop = function () {
+          clearTimeout(stopTimer);
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          var blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+          recorder = null;
+          mic.className = "mic";
+          mic.setAttribute("aria-label", "Record a voice note");
+          if (!blob.size) return;
+          busy = true;
+          typing.textContent = "Listening to your voice note…";
+          var fd = new FormData();
+          fd.append("key", key);
+          fd.append("audio", blob, "note");
+          fetch(base + "/api/widget/transcribe", { method: "POST", body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              busy = false;
+              typing.textContent = "";
+              if (d.text) { input.value = d.text; form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event("submit", { cancelable: true })); }
+              else add("assistant", d.error || "Sorry, I couldn't hear that. Please type your message.");
+            })
+            .catch(function () { busy = false; typing.textContent = ""; add("assistant", "Sorry, the connection dropped. Please try again."); });
+        };
+        recorder.start();
+        mic.className = "mic rec";
+        mic.setAttribute("aria-label", "Stop and send voice note");
+        typing.textContent = "Recording… tap the mic again to send.";
+        stopTimer = setTimeout(function () { if (recorder) recorder.stop(); }, 110000);
+      }).catch(function () { add("assistant", "I can't use your microphone. Please allow it in your browser, or type your message."); });
+    });
+
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var text = input.value.trim();
