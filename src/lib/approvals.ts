@@ -42,7 +42,7 @@ export async function decide(store: Store, tenant: Tenant, approvalId: string, d
     const c = (await store.listConnectors(tenant.id)).find((x) => x.id === a.payload.connectorId);
     try {
       if (!c) throw new Error("connector removed");
-      const out = await callConnectorTool(c, a.payload.tool, (a.payload.arguments as Record<string, unknown>) ?? {});
+      const out = await callConnectorTool(c, a.payload.tool, (a.payload.arguments as Record<string, unknown>) ?? {}, `approved by ${actor}`);
       note += ` (${c.name} did it: ${out.slice(0, 300)})`;
     } catch (err) {
       note += ` (${a.payload.tool} could not run: ${err instanceof Error ? err.message : "error"})`;

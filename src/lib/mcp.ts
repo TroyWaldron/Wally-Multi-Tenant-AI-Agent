@@ -52,8 +52,8 @@ async function rpc(c: Connector, headers: Record<string, string>, id: number | n
 }
 
 /** Opens a session, runs one request, and returns its result. */
-async function session<T>(c: Connector, method: string, params: unknown): Promise<T> {
-  const auth = await authHeader(c);
+async function session<T>(c: Connector, method: string, params: unknown, extra: Record<string, string> = {}): Promise<T> {
+  const auth = { ...(await authHeader(c)), ...extra };
   const init = await rpc(c, auth, 1, "initialize", { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: "wally", version: "1.0" } });
   const sid = init.res.headers.get("mcp-session-id");
   const headers = { ...auth, ...(sid ? { "Mcp-Session-Id": sid } : {}) };
@@ -74,8 +74,10 @@ export async function listConnectorTools(c: Connector, fresh = false): Promise<M
   return tools;
 }
 
-export async function callConnectorTool(c: Connector, tool: string, args: Record<string, unknown>): Promise<string> {
-  const r = await session<{ content?: { type: string; text?: string }[]; structuredContent?: unknown; isError?: boolean }>(c, "tools/call", { name: tool, arguments: args });
+/** Runs one tool. `as` names the AI staff member (or approver) so the business's own audit log shows who asked. */
+export async function callConnectorTool(c: Connector, tool: string, args: Record<string, unknown>, as?: string): Promise<string> {
+  const who: Record<string, string> = as ? { "X-Wally-Agent": as.replace(/[^\w .'-]/g, "").slice(0, 60) } : {};
+  const r = await session<{ content?: { type: string; text?: string }[]; structuredContent?: unknown; isError?: boolean }>(c, "tools/call", { name: tool, arguments: args }, who);
   const text = (r.content ?? [])
     .filter((b) => b.type === "text" && b.text)
     .map((b) => b.text)

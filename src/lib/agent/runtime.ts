@@ -551,7 +551,7 @@ async function runConnectorTool(ct: ConnectorTool, input: Record<string, unknown
   }
   await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "tool.connector", detail: { connector: ct.connector.name, tool: ct.tool.name, input, conversationId: conversation.id } });
   try {
-    return ev("ran", await callConnectorTool(ct.connector, ct.tool.name, input));
+    return ev("ran", await callConnectorTool(ct.connector, ct.tool.name, input, agent.name));
   } catch (err) {
     return ev("error", `${ct.connector.name} couldn't do that right now (${err instanceof Error ? err.message : "error"}). Offer to have the team follow up.`);
   }
