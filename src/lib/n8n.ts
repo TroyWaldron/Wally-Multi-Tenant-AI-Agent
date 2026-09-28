@@ -17,6 +17,8 @@ export const N8N_EVENTS = [
   { event: "approval_requested", when: "An agent needs a human decision" },
   { event: "approval_decided", when: "Someone approves or rejects in the inbox" },
   { event: "escalated", when: "An agent hands a conversation to a person" },
+  { event: "draft_ready", when: "An agent drafted a message or email for a person to approve" },
+  { event: "draft_approved", when: "A draft was approved: n8n sends it (WhatsApp, SMS, or email when Wally has no mailbox)" },
   { event: "lead_captured", when: "An agent captures a new lead" },
   { event: "outcome_recorded", when: "An outcome is logged (booking, lead, ticket closed...)" },
   { event: "budget_exceeded", when: "An agent hits its monthly budget and pauses" },

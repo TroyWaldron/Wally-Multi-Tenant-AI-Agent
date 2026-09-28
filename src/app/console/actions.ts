@@ -185,10 +185,10 @@ export async function stopExperiment(tenantId: string, agentId: string, keep: "A
 
 /* --------------------------------------------------------------- approvals */
 
-export async function decideApproval(tenantId: string, approvalId: string, decision: "approved" | "rejected", lesson?: string) {
+export async function decideApproval(tenantId: string, approvalId: string, decision: "approved" | "rejected", lesson?: string, edits?: { subject?: string; body?: string }) {
   return wrap(async () => {
     const { store, tenant, actor } = await ctx(tenantId);
-    return decide(store, tenant, approvalId, decision, actor, lesson);
+    return decide(store, tenant, approvalId, decision, actor, lesson, edits);
   });
 }
 

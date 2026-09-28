@@ -2,6 +2,7 @@ import { WallyMark } from "@/components/WallyMark";
 import { readApprovalToken } from "@/lib/approvalLinks";
 import { systemStore } from "@/lib/session";
 import { ReviewForm } from "./ReviewForm";
+import { editableOf } from "@/lib/draftText";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Review a request · Wally", robots: { index: false } };
@@ -29,7 +30,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ token: 
             <h1 className="mt-1 font-heading text-lg font-semibold text-ink">{approval.summary}</h1>
             <p className="mt-1 text-xs text-slate/60">Asked {new Date(approval.createdAt).toLocaleString("en-GB", { timeZone: tenant?.timezone, dateStyle: "medium", timeStyle: "short" })}</p>
             {approval.status === "pending" ? (
-              <ReviewForm token={token} />
+              <ReviewForm token={token} draft={editableOf(approval)} />
             ) : (
               <p className="mt-6 rounded-xl bg-ink/5 p-3 text-sm text-ink">
                 Already {approval.status} by {approval.decidedBy ?? "someone"}.

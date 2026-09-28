@@ -13,6 +13,8 @@ export const OFFICE_TOOLS = new Set(["message_staff", "add_follow_up", "list_fol
 const EMAIL = "send_email";
 /** Every AI staff member may ask another for information. */
 const COLLEAGUE = "ask_colleague";
+/** Every AI staff member may draft for a person to approve, and read past chats with someone. */
+const DRAFTING = new Set(["draft_message", "look_up_history"]);
 
 /** Back-office AI staff (channel "ops") work with the business's people, not its customers. */
 export function worksWithTeam(agent: Pick<Agent, "channels">) {
@@ -21,7 +23,7 @@ export function worksWithTeam(agent: Pick<Agent, "channels">) {
 
 export function evaluate(agent: Agent, tool: string, input: Record<string, unknown>): PolicyDecision {
   const b = agent.boundaries;
-  const office = (OFFICE_TOOLS.has(tool) && worksWithTeam(agent)) || tool === EMAIL || tool === COLLEAGUE;
+  const office = (OFFICE_TOOLS.has(tool) && worksWithTeam(agent)) || tool === EMAIL || tool === COLLEAGUE || DRAFTING.has(tool);
   if (!ALWAYS_ALLOWED.has(tool) && !office && !b.allowedTools.includes(tool)) {
     return { decision: "deny", reason: `${agent.name} is not allowed to use ${tool}.` };
   }

@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { decideFromLink, type LinkResult } from "./actions";
 
-export function ReviewForm({ token }: { token: string }) {
+export function ReviewForm({ token, draft }: { token: string; draft?: { subject?: string; body: string } | null }) {
   const [state, action, pending] = useActionState<LinkResult, FormData>(decideFromLink.bind(null, token), null);
   const [declining, setDeclining] = useState(false);
   if (state?.ok) return <p className="mt-6 rounded-xl bg-lagoon/10 p-3 text-sm font-medium text-lagoon-deep">{state.message}</p>;
@@ -11,6 +11,20 @@ export function ReviewForm({ token }: { token: string }) {
   const input = "w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink";
   return (
     <form action={action} className="mt-6 flex flex-col gap-3">
+      {draft && (
+        <>
+          {draft.subject !== undefined && (
+            <label className="text-xs font-semibold text-ink/70">
+              Subject
+              <input name="subject" defaultValue={draft.subject} className={`mt-1 ${input}`} />
+            </label>
+          )}
+          <label className="text-xs font-semibold text-ink/70">
+            Message (edit before approving if you like)
+            <textarea name="body" defaultValue={draft.body} rows={10} className={`mt-1 ${input}`} />
+          </label>
+        </>
+      )}
       <label className="text-xs font-semibold text-ink/70">
         Your name
         <input name="name" required maxLength={60} autoComplete="name" className={`mt-1 ${input}`} />

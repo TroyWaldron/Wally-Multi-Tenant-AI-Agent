@@ -5,14 +5,18 @@ import { callConnectorTool } from "@/lib/mcp";
 import { notify, runWorkflow } from "@/lib/n8n";
 import { deliver } from "@/lib/officeMail";
 import type { EmailRequest } from "@/lib/email";
+import { sendDraft, withEdits, type Draft, type DraftEdits } from "@/lib/drafts";
 import type { Store } from "@/lib/store/types";
 import type { Tenant } from "@/lib/types";
 
 export type DecideResult = { ok: true; message: string } | { ok: false; error: string };
 
-export async function decide(store: Store, tenant: Tenant, approvalId: string, decision: "approved" | "rejected", actor: string, lesson?: string): Promise<DecideResult> {
-  const a = await store.decideApproval(tenant.id, approvalId, decision, actor);
-  if (!a) return { ok: false, error: "That request was already decided." };
+export async function decide(store: Store, tenant: Tenant, approvalId: string, decision: "approved" | "rejected", actor: string, lesson?: string, edits?: DraftEdits): Promise<DecideResult> {
+  const decided = await store.decideApproval(tenant.id, approvalId, decision, actor);
+  if (!decided) return { ok: false, error: "That request was already decided." };
+  // A person may reword a draft or email before approving it.
+  const a = decision === "approved" ? { ...decided, payload: withEdits(decided.payload, edits) } : decided;
+  if (a.payload !== decided.payload) await store.audit(tenant.id, { actorType: "user", actor, action: "draft.edited", detail: { approvalId, ...edits } });
   await store.audit(tenant.id, { actorType: "user", actor, action: `approval.${decision}`, detail: { approvalId, action: a.action } });
 
   let note = decision === "approved" ? `The team approved: ${a.summary}` : `The team declined: ${a.summary}`;
@@ -42,6 +46,13 @@ export async function decide(store: Store, tenant: Tenant, approvalId: string, d
       note += ` (${c.name} did it: ${out.slice(0, 300)})`;
     } catch (err) {
       note += ` (${a.payload.tool} could not run: ${err instanceof Error ? err.message : "error"})`;
+    }
+  }
+  if (decision === "approved" && a.payload.draft && typeof a.payload.draft === "object") {
+    try {
+      note += ` (${await sendDraft(store, tenant, approvalId, a.payload.draft as Draft, actor)})`;
+    } catch (err) {
+      note += ` (the draft could not be sent: ${err instanceof Error ? err.message : "error"})`;
     }
   }
   if (decision === "approved" && a.payload.email && typeof a.payload.email === "object") {

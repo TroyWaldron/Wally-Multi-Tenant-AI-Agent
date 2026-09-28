@@ -11,6 +11,7 @@ import { MANAGERS, describeTasks, dueAtFrom, messageStaff, whenIn } from "@/lib/
 import { buildExcel, buildWord, documentLink, LINK_DAYS, saveDocument, type Sheet } from "@/lib/documents";
 import { emailConfigured, splitAddresses } from "@/lib/email";
 import { sendOrAsk } from "@/lib/officeMail";
+import { createDraft } from "@/lib/drafts";
 import { findColleague, teamLine } from "@/lib/agent/colleagues";
 import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
@@ -155,6 +156,34 @@ const COLLEAGUE_TOOL_DEF: BetaTool = {
     required: ["colleague", "question"],
   },
 };
+
+// Drafting from what's on file: look things up first (your tools, connectors,
+// knowledge, look_up_history), then write it for a person to check and approve.
+const DRAFT_TOOL_DEFS: BetaTool[] = [
+  {
+    name: "look_up_history",
+    description: "Find past conversations Wally has had with a person (website chat, WhatsApp, email), by name, email or phone, with their recent messages. Use before drafting to someone.",
+    input_schema: { type: "object", properties: { who: { type: "string", description: "Name, email or phone." } }, required: ["who"] },
+  },
+  {
+    name: "draft_message",
+    description:
+      "Write a message or email for someone (a guest, supplier, owner) from what's on file, for a person at the business to check, edit and approve before it goes out. Look up the facts first; never invent details. Use this whenever you're asked to draft, prepare or write something to send.",
+    input_schema: {
+      type: "object",
+      properties: {
+        channel: { type: "string", enum: ["email", "whatsapp", "sms"] },
+        to: { type: "string", description: "Their email address or phone number if on file, else blank." },
+        to_name: { type: "string" },
+        subject: { type: "string", description: "Email only." },
+        body: { type: "string", description: "The full message, ready to send, signed off as the business." },
+        about: { type: "string", description: "A few words for the approver, e.g. 'reply to his Tropicbird enquiry'." },
+        document_ids: { type: "array", items: { type: "string" }, description: "Documents from create_document to attach (email)." },
+      },
+      required: ["channel", "body", "about"],
+    },
+  },
+];
 
 const EMAIL_TOOL_DEF: BetaTool = {
   name: "send_email",
@@ -371,6 +400,42 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       });
       if (!r.ok) return ev("error", `The ${String(input.workflow)} workflow isn't available right now (${r.error ?? `HTTP ${r.status}`}). Offer to have the team follow up.`);
       return ev("ran", typeof r.body === "string" ? r.body : JSON.stringify(r.body));
+    }
+    case "look_up_history": {
+      const who = String(input.who ?? "").trim().toLowerCase();
+      if (who.length < 3) return ev("error", "Give a name, email or phone.");
+      const digits = who.replace(/\D/g, "");
+      const convs = (await store.listConversations(tenant.id, 150))
+        .filter((c) => c.id !== conversation.id && c.channel !== "ops")
+        .filter((c) => {
+          const k = c.contact;
+          return (k.name && k.name.toLowerCase().includes(who)) || (k.email && k.email.toLowerCase() === who) || (digits.length >= 7 && k.phone?.replace(/\D/g, "").endsWith(digits.slice(-7)));
+        })
+        .slice(0, 3);
+      if (!convs.length) return ev("ran", "No past conversations with them in Wally. Check the business's own records (your connector tools) instead.");
+      const parts = await Promise.all(
+        convs.map(async (c) => {
+          const msgs = (await store.listMessages(tenant.id, c.id)).filter((m) => m.role === "user" || m.role === "assistant" || m.role === "staff").slice(-12);
+          const contact = [c.contact.name, c.contact.email, c.contact.phone].filter(Boolean).join(", ");
+          return `## ${c.channel} chat, ${c.createdAt.slice(0, 10)} (${contact})\n${msgs.map((m) => `${m.role === "user" ? "Them" : m.role === "staff" ? "Team" : "AI"}: ${m.content.slice(0, 400)}`).join("\n")}`;
+        })
+      );
+      return ev("ran", parts.join("\n\n"));
+    }
+    case "draft_message": {
+      const channel = input.channel === "whatsapp" || input.channel === "sms" ? input.channel : "email";
+      const body = String(input.body ?? "").trim();
+      if (!body) return ev("error", "Write the message itself in body.");
+      const a = await createDraft(store, tenant, agent, conversation.id, {
+        channel,
+        to: String(input.to ?? "").trim().slice(0, 200),
+        toName: input.to_name ? String(input.to_name).slice(0, 100) : undefined,
+        subject: input.subject ? String(input.subject).slice(0, 200) : undefined,
+        body: body.slice(0, 8000),
+        about: String(input.about ?? "a message").slice(0, 200),
+        documentIds: Array.isArray(input.document_ids) ? input.document_ids.map(String) : undefined,
+      });
+      return ev("sent_for_approval", `Draft saved (${a.id}) and sent to the team to check and approve. Show the person you're talking to the draft text, and say it goes out once approved (they can edit it first).`);
     }
     case "ask_colleague":
       return askColleague(String(input.colleague ?? ""), String(input.question ?? ""), ctx, ev);
@@ -601,6 +666,7 @@ export async function runAgent(args: {
     ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
     ...(worksWithTeam(agent) ? [...OFFICE_TOOL_DEFS, ...PAPERWORK_TOOL_DEFS] : []),
     EMAIL_TOOL_DEF,
+    ...DRAFT_TOOL_DEFS,
     ...(!depth && team.some((a) => a.id !== agent.id && a.status === "live") ? [COLLEAGUE_TOOL_DEF] : []),
     ...asModelTools(connectorTools),
   ];

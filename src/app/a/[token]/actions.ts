@@ -15,7 +15,10 @@ export async function decideFromLink(token: string, _prev: LinkResult, form: For
   const store = systemStore();
   const tenant = await store.getTenant(t.tenantId);
   if (!tenant) return { ok: false, message: "This business is no longer on Wally." };
-  const r = await decide(store, tenant, t.approvalId, decision, `${name || "Someone"} (review link)`, String(form.get("reason") ?? "") || undefined);
+  const body = form.get("body");
+  const subject = form.get("subject");
+  const edits = typeof body === "string" ? { body, subject: typeof subject === "string" ? subject : undefined } : undefined;
+  const r = await decide(store, tenant, t.approvalId, decision, `${name || "Someone"} (review link)`, String(form.get("reason") ?? "") || undefined, edits);
   revalidatePath(`/a/${token}`);
   return r.ok ? { ok: true, message: decision === "approved" ? "Approved. It's being done now." : "Declined. The AI staff member has been told." } : { ok: false, message: r.error };
 }
