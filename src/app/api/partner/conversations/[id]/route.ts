@@ -12,10 +12,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const conv = await ctx.store.getConversation(ctx.tenant.id, id);
   if (!conv || conv.channel === HELPDESK_CHANNEL) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  const agent = conv.agentId ? (await ctx.store.listAgents(ctx.tenant.id)).find((a) => a.id === conv.agentId) : undefined;
   const messages = (await ctx.store.listMessages(ctx.tenant.id, conv.id))
     .filter((m) => m.role !== "tool")
-    .map((m) => ({ id: m.id, role: m.role, content: m.content, by: m.role === "staff" ? String(m.meta.by ?? "") : undefined, createdAt: m.createdAt }));
-  return NextResponse.json({ conversation: { id: conv.id, channel: conv.channel, status: conv.status, contact: conv.contact }, messages });
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      // Who wrote it: the team member, or the AI staff member who answered.
+      by: m.role === "staff" ? String(m.meta.by ?? "") : m.role === "assistant" ? String(m.meta.agent ?? agent?.name ?? "") : undefined,
+      createdAt: m.createdAt,
+    }));
+  return NextResponse.json({
+    conversation: { id: conv.id, channel: conv.channel, status: conv.status, contact: conv.contact, agent: agent ? { id: agent.id, name: agent.name, title: agent.title } : null },
+    messages,
+  });
 }
 
 const Body = z.discriminatedUnion("action", [

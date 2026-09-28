@@ -11,6 +11,7 @@ import { MANAGERS, describeTasks, dueAtFrom, messageStaff, whenIn } from "@/lib/
 import { buildExcel, buildWord, documentLink, LINK_DAYS, saveDocument, type Sheet } from "@/lib/documents";
 import { emailConfigured, splitAddresses } from "@/lib/email";
 import { sendOrAsk } from "@/lib/officeMail";
+import { findColleague, teamLine } from "@/lib/agent/colleagues";
 import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
@@ -142,6 +143,19 @@ const OFFICE_TOOL_DEFS: BetaTool[] = [
   },
 ];
 
+const COLLEAGUE_TOOL_DEF: BetaTool = {
+  name: "ask_colleague",
+  description: "Ask one of your AI colleagues (the other AI staff at this business) a question and get their answer straight away. Use it whenever they hold information you need. They are always available.",
+  input_schema: {
+    type: "object",
+    properties: {
+      colleague: { type: "string", description: "Their name, e.g. Coco." },
+      question: { type: "string", description: "What you need, with enough context for them to answer in one go." },
+    },
+    required: ["colleague", "question"],
+  },
+};
+
 const EMAIL_TOOL_DEF: BetaTool = {
   name: "send_email",
   description: "Send an email from the business's mailbox. Emails to the business's own staff go straight out; to anyone else (guests, suppliers) they wait for a person's approval. You can attach documents you created.",
@@ -230,7 +244,7 @@ export function humanize(text: string) {
     .replace(/,\s*([,.!?])/g, "$1");
 }
 
-export function buildSystemPrompt(tenant: Tenant, agent: Agent) {
+export function buildSystemPrompt(tenant: Tenant, agent: Agent, team: Agent[] = []) {
   const role = getRole(agent.templateKey);
   const base = renderPrompt(role?.systemPrompt ?? "You are an AI assistant for {{tenant}}.", {
     tenant: tenant.name,
@@ -245,7 +259,8 @@ export function buildSystemPrompt(tenant: Tenant, agent: Agent) {
 
 Today is ${todayIn(tenant.timezone)} (${tenant.timezone}).
 
-Your name is ${agent.name}${agent.title ? `, ${agent.title}` : ""}.
+Your name is ${agent.name}${agent.title ? `, ${agent.title}` : ""}. You are only ${agent.name}: never speak as another team member.
+${teamLine(team, agent) ? `Your AI colleagues: ${teamLine(team, agent)}. They are AI like you and always available: to get information from one, use ask_colleague and you get their answer at once. Never say a colleague is away, busy or hasn't replied. Refer to colleagues by name, never "he" or "she".` : ""}
 Tone: ${describe(agent.personality)}.
 
 About the business:
@@ -261,7 +276,7 @@ ${worksWithTeam(agent) ? `\nYou work with the ${tenant.name} team, not its custo
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
 
-export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation; dryRun?: boolean; connectorTools?: Map<string, ConnectorTool> };
+export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversation: Conversation; dryRun?: boolean; connectorTools?: Map<string, ConnectorTool>; /** 1 inside a colleague's question: no further hops. */ depth?: number };
 
 // In a scenario test (dryRun) these read and nothing else; every other tool
 // is simulated so a test never creates a lead, an approval or a handover.
@@ -357,10 +372,15 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       if (!r.ok) return ev("error", `The ${String(input.workflow)} workflow isn't available right now (${r.error ?? `HTTP ${r.status}`}). Offer to have the team follow up.`);
       return ev("ran", typeof r.body === "string" ? r.body : JSON.stringify(r.body));
     }
+    case "ask_colleague":
+      return askColleague(String(input.colleague ?? ""), String(input.question ?? ""), ctx, ev);
     case "message_staff": {
       const to = String(input.to ?? "").trim();
       const text = String(input.text ?? "").trim();
       if (!to || !text) return ev("error", "Say who the message is for and what it says.");
+      // An AI colleague isn't a person to text: ask them and get the answer now.
+      const colleague = findColleague((await store.listAgents(tenant.id)).filter((a) => a.id !== agent.id), to);
+      if (colleague) return askColleague(colleague.name, text, ctx, ev);
       const sent = await messageStaff(tenant, { agent: agent.name, to, text, conversationId: conversation.id, kind: "message" });
       return sent ? ev("ran", `Sent to ${to}.`) : ev("error", "No staff channel is set up for this business yet (back office alerts or Slack). Put the message in your reply instead.");
     }
@@ -472,6 +492,32 @@ async function runConnectorTool(ct: ConnectorTool, input: Record<string, unknown
   }
 }
 
+// One agent asks another and waits for the answer. A colleague answering
+// can't ask a third, so questions never loop.
+async function askColleague(name: string, question: string, ctx: ToolContext, ev: (o: ToolEvent["outcome"], r: string) => ToolEvent) {
+  const { store, tenant, agent } = ctx;
+  if (ctx.depth) return ev("error", "You're answering a colleague's question: answer from what you know and your own tools.");
+  const team = (await store.listAgents(tenant.id)).filter((a) => a.id !== agent.id && a.status === "live");
+  const target = findColleague(team, name);
+  if (!target) return ev("error", `No AI colleague called ${name}. Your colleagues: ${team.map((a) => a.name).join(", ") || "none"}.`);
+  if (!question.trim()) return ev("error", "Say what you need from them.");
+  if (ctx.dryRun) return ev("ran", `(Test) ${target.name} answered.`);
+  const key = `${agent.id.slice(0, 8)}.asks.${target.id.slice(0, 8)}@team.wally`;
+  const conversation =
+    (await store.findOpenConversation(tenant.id, "ops", key)) ??
+    (await store.createConversation(tenant.id, { agentId: target.id, channel: "ops", contact: { name: `${agent.name} (AI colleague)`, email: key }, variant: null }));
+  const run = await runAgent({
+    store,
+    tenant,
+    agent: target,
+    conversation,
+    text: `[Question from ${agent.name}, your AI colleague${agent.title ? ` (${agent.title})` : ""}, working for the team] ${question.slice(0, 2000)}`,
+    depth: 1,
+  });
+  await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "colleague.asked", detail: { colleague: target.name, conversationId: conversation.id, question: question.slice(0, 300) } });
+  return ev("ran", `${target.name} answered: ${run.reply}`);
+}
+
 export function historyToMessages(history: { role: string; content: string }[]): BetaMessageParam[] {
   const out: BetaMessageParam[] = [];
   for (const m of history) {
@@ -501,8 +547,10 @@ export async function runAgent(args: {
   text: string;
   /** Scenario tests: no side effects and no n8n notifications. */
   dryRun?: boolean;
+  /** Set when a colleague asked: this agent can't ask a colleague in turn. */
+  depth?: number;
 }): Promise<AgentRun> {
-  const { store, tenant, conversation, text, dryRun } = args;
+  const { store, tenant, conversation, text, dryRun, depth } = args;
   const agent = await withVariant(store, args.agent, conversation.variant);
   const empty = { toolEvents: [], model: null, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
@@ -514,7 +562,7 @@ export async function runAgent(args: {
       conversationId: conversation.id,
       role: "assistant",
       content: run.reply,
-      meta: { toolEvents: run.toolEvents, model: run.model, mode: run.mode, costUsd: run.costUsd },
+      meta: { toolEvents: run.toolEvents, model: run.model, mode: run.mode, costUsd: run.costUsd, agent: agent.name, agentId: agent.id },
     });
     if (!dryRun) notify(tenant, "agent_replied", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, reply: run.reply, agent: agent.name });
     return run;
@@ -546,16 +594,18 @@ export async function runAgent(args: {
   if (!modelOrder.length) return finish({ ...empty, mode: "demo", reply: await demoReply(store, tenant, agent, text) });
 
   await syncKnowledgeIfStale(tenant);
-  const system = buildSystemPrompt(tenant, agent);
+  const team = await store.listAgents(tenant.id);
+  const system = buildSystemPrompt(tenant, agent, team);
   const connectorTools = await connectorToolsFor(store, tenant.id, agent);
   const tools = [
     ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
     ...(worksWithTeam(agent) ? [...OFFICE_TOOL_DEFS, ...PAPERWORK_TOOL_DEFS] : []),
     EMAIL_TOOL_DEF,
+    ...(!depth && team.some((a) => a.id !== agent.id && a.status === "live") ? [COLLEAGUE_TOOL_DEF] : []),
     ...asModelTools(connectorTools),
   ];
   const history = await store.listMessages(tenant.id, conversation.id);
-  const ctx = { store, tenant, agent, conversation, dryRun, connectorTools };
+  const ctx = { store, tenant, agent, conversation, dryRun, connectorTools, depth };
 
   const toolEvents: ToolEvent[] = [];
   let inputTokens = 0;

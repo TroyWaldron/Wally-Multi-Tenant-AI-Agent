@@ -11,6 +11,8 @@ const ALWAYS_ALLOWED = new Set(["request_approval", "escalate_to_human"]);
 export const OFFICE_TOOLS = new Set(["message_staff", "add_follow_up", "list_follow_ups", "close_follow_up", "add_calendar_entry", "create_document"]);
 /** Every AI staff member may write emails; anything not to staff waits for approval (officeMail.ts). */
 const EMAIL = "send_email";
+/** Every AI staff member may ask another for information. */
+const COLLEAGUE = "ask_colleague";
 
 /** Back-office AI staff (channel "ops") work with the business's people, not its customers. */
 export function worksWithTeam(agent: Pick<Agent, "channels">) {
@@ -19,7 +21,7 @@ export function worksWithTeam(agent: Pick<Agent, "channels">) {
 
 export function evaluate(agent: Agent, tool: string, input: Record<string, unknown>): PolicyDecision {
   const b = agent.boundaries;
-  const office = (OFFICE_TOOLS.has(tool) && worksWithTeam(agent)) || tool === EMAIL;
+  const office = (OFFICE_TOOLS.has(tool) && worksWithTeam(agent)) || tool === EMAIL || tool === COLLEAGUE;
   if (!ALWAYS_ALLOWED.has(tool) && !office && !b.allowedTools.includes(tool)) {
     return { decision: "deny", reason: `${agent.name} is not allowed to use ${tool}.` };
   }

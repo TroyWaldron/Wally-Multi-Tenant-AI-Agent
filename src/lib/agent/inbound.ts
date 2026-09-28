@@ -33,6 +33,8 @@ export async function handleInbound(args: {
   let conversation = args.conversationId ? await store.getConversation(tenant.id, args.conversationId) : null;
   const contactKey = args.contact?.phone || args.contact?.email;
   if (!conversation && contactKey) conversation = await store.findOpenConversation(tenant.id, channel, contactKey);
+  // Asked for a specific agent: never continue a chat that belongs to another one.
+  if (conversation && args.agentId && conversation.agentId && conversation.agentId !== args.agentId) conversation = null;
 
   const agents = await store.listAgents(tenant.id);
   const agentId = args.agentId ?? conversation?.agentId;
