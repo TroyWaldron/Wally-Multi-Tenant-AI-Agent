@@ -2,6 +2,7 @@ import type {
   Agency,
   AgencyInvite,
   AgentTask,
+  AgentDocument,
   Agent,
   AgentVersion,
   Approval,
@@ -38,6 +39,10 @@ export interface Store {
   listTasks(tenantId: string, status?: AgentTask["status"]): Promise<AgentTask[]>;
   createTask(tenantId: string, t: Pick<AgentTask, "agentId" | "conversationId" | "title" | "detail" | "assignee" | "dueAt">): Promise<AgentTask>;
   updateTask(tenantId: string, id: string, patch: Partial<Pick<AgentTask, "status" | "chaseCount" | "lastChasedAt" | "doneAt" | "doneNote" | "dueAt">>): Promise<void>;
+
+  listDocuments(tenantId: string, limit?: number): Promise<AgentDocument[]>;
+  getDocument(tenantId: string, id: string): Promise<AgentDocument | null>;
+  addDocument(tenantId: string, d: Pick<AgentDocument, "agentId" | "title" | "kind" | "filename" | "path">): Promise<AgentDocument>;
 
   listAgencies(): Promise<Agency[]>;
   getAgency(id: string): Promise<Agency | null>;

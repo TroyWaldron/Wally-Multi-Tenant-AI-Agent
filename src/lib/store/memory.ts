@@ -11,6 +11,7 @@ import type {
   Agency,
   AgencyInvite,
   AgentTask,
+  AgentDocument,
   Agent,
   AgentVersion,
   Approval,
@@ -32,6 +33,7 @@ type Db = {
   agencies?: Agency[];
   agencyInvites?: AgencyInvite[];
   tasks?: AgentTask[];
+  documents?: AgentDocument[];
   agents: Agent[];
   channels: Channel[];
   contracts: Contract[];
@@ -208,6 +210,21 @@ export const memoryStore: Store = {
     assertTenant(tenantId);
     const t = (db().tasks ?? []).find((x) => x.tenantId === tenantId && x.id === id);
     if (t) Object.assign(t, patch);
+  },
+
+  async listDocuments(tenantId, limit = 50) {
+    assertTenant(tenantId);
+    return (db().documents ??= []).filter((d) => d.tenantId === tenantId).sort(byNewest).slice(0, limit);
+  },
+  async getDocument(tenantId, id) {
+    assertTenant(tenantId);
+    return (db().documents ?? []).find((d) => d.tenantId === tenantId && d.id === id) ?? null;
+  },
+  async addDocument(tenantId, d) {
+    assertTenant(tenantId);
+    const doc: AgentDocument = { ...d, id: randomUUID(), tenantId, createdAt: now() };
+    (db().documents ??= []).push(doc);
+    return doc;
   },
 
   async listAgencies() {

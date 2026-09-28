@@ -3,6 +3,8 @@
 // becomes a standing rule on the agent (the accountability loop).
 import { callConnectorTool } from "@/lib/mcp";
 import { notify, runWorkflow } from "@/lib/n8n";
+import { deliver } from "@/lib/officeMail";
+import type { EmailRequest } from "@/lib/email";
 import type { Store } from "@/lib/store/types";
 import type { Tenant } from "@/lib/types";
 
@@ -40,6 +42,16 @@ export async function decide(store: Store, tenant: Tenant, approvalId: string, d
       note += ` (${c.name} did it: ${out.slice(0, 300)})`;
     } catch (err) {
       note += ` (${a.payload.tool} could not run: ${err instanceof Error ? err.message : "error"})`;
+    }
+  }
+  if (decision === "approved" && a.payload.email && typeof a.payload.email === "object") {
+    const email = a.payload.email as EmailRequest;
+    try {
+      await deliver(store, tenant, email);
+      note += ` (sent to ${email.to.join(", ")})`;
+      await store.audit(tenant.id, { actorType: "user", actor, action: email.invite ? "calendar.invited" : "email.sent", detail: { to: email.to, subject: email.subject, approvalId } });
+    } catch (err) {
+      note += ` (the email could not be sent: ${err instanceof Error ? err.message : "error"})`;
     }
   }
   if (a.conversationId) await store.addMessage(tenant.id, { conversationId: a.conversationId, role: "system", content: note, meta: { approvalId } });

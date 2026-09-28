@@ -94,6 +94,8 @@ export type TenantData = Base & {
   roi: Roi;
   /** Open follow-ups AI staff set for the team. */
   tasks: AgentTask[];
+  /** Latest documents AI staff created, with download links. */
+  documents: { id: string; title: string; kind: string; createdAt: string; url: string | null }[];
 };
 
 export type ConsoleData = (Base & { tenant: null }) | TenantData;

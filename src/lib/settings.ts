@@ -8,13 +8,64 @@ export type SettingDef = {
   key: string;
   label: string;
   scope: "tenant" | "platform";
-  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "slack" | "roi" | "calls";
+  section: "n8n" | "knowledge" | "ai" | "whatsapp" | "slack" | "roi" | "calls" | "email";
   secret: boolean;
   help: string;
   placeholder?: string;
 };
 
 export const SETTING_DEFS: SettingDef[] = [
+  {
+    key: "SMTP_HOST",
+    label: "Mail server (SMTP host)",
+    scope: "tenant",
+    section: "email",
+    secret: false,
+    help: "The business's outgoing mail server, e.g. smtp.gmail.com or smtp.office365.com.",
+    placeholder: "smtp.example.com",
+  },
+  {
+    key: "SMTP_PORT",
+    label: "Port",
+    scope: "tenant",
+    section: "email",
+    secret: false,
+    help: "Usually 587 (or 465 for SSL).",
+    placeholder: "587",
+  },
+  {
+    key: "SMTP_USER",
+    label: "Mailbox login",
+    scope: "tenant",
+    section: "email",
+    secret: false,
+    help: "The mailbox the AI staff send from, e.g. reservations@yourbusiness.com.",
+  },
+  {
+    key: "SMTP_PASS",
+    label: "Mailbox password",
+    scope: "tenant",
+    section: "email",
+    secret: true,
+    help: "For Gmail or Microsoft 365, an app password.",
+  },
+  {
+    key: "EMAIL_FROM",
+    label: "Send as",
+    scope: "tenant",
+    section: "email",
+    secret: false,
+    help: "Name and address people see, e.g. Sunsational Tobago <reservations@sunsationaltobago.com>. Blank uses the mailbox login.",
+  },
+  {
+    key: "STAFF_EMAIL_DOMAINS",
+    label: "Staff email domains",
+    scope: "tenant",
+    section: "email",
+    secret: false,
+    help: "Emails to these domains (comma separated) go out straight away. Everything else, like guests and suppliers, waits for a person's approval.",
+    placeholder: "sunsationaltobago.com",
+  },
   {
     key: "CALL_CONSENT_NOTICE",
     label: "What callers hear first",

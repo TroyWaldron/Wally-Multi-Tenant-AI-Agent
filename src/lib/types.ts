@@ -68,6 +68,8 @@ export type AgentTask = {
   createdAt: string;
 };
 
+export type AgentDocument = { id: string; tenantId: string; agentId: string | null; title: string; kind: "letter" | "word" | "excel"; filename: string; path: string; createdAt: string };
+
 export type AgencyInvite = { id: string; agencyId: string; email: string; invitedBy: string | null; createdAt: string };
 
 export type Tenant = {

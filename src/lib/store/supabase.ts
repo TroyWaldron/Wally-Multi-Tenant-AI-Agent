@@ -7,6 +7,7 @@ import type {
   Agency,
   AgencyInvite,
   AgentTask,
+  AgentDocument,
   Agent,
   AgentVersion,
   Approval,
@@ -236,6 +237,8 @@ const task = (r: Row): AgentTask => ({
   createdAt: r.created_at,
 });
 
+const document = (r: Row): AgentDocument => ({ id: r.id, tenantId: r.tenant_id, agentId: r.agent_id, title: r.title, kind: r.kind, filename: r.filename, path: r.path, createdAt: r.created_at });
+
 function tenantPatch(p: Partial<Tenant>): Row {
   const out: Row = {};
   if (p.name !== undefined) out.name = p.name;
@@ -305,6 +308,21 @@ export function supabaseStore(db: SupabaseClient): Store {
       if (patch.doneNote !== undefined) row.done_note = patch.doneNote;
       if (patch.dueAt !== undefined) row.due_at = patch.dueAt;
       must(await db.from("agent_tasks").update(row).eq("tenant_id", tenantId).eq("id", id));
+    },
+
+    async listDocuments(tenantId, limit = 50) {
+      assertTenant(tenantId);
+      return must(await db.from("agent_documents").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(limit)).map(document);
+    },
+    async getDocument(tenantId, id) {
+      assertTenant(tenantId);
+      const r = must(await db.from("agent_documents").select("*").eq("tenant_id", tenantId).eq("id", id).maybeSingle());
+      return r ? document(r) : null;
+    },
+    async addDocument(tenantId, d) {
+      assertTenant(tenantId);
+      const row = { tenant_id: tenantId, agent_id: d.agentId, title: d.title, kind: d.kind, filename: d.filename, path: d.path };
+      return document(must(await db.from("agent_documents").insert(row).select("*").single()));
     },
 
     async listAgencies() {

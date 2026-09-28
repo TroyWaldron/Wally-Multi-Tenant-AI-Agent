@@ -3,6 +3,7 @@ import { loadTeam } from "@/lib/teamData";
 import { computeRoi } from "@/lib/roi";
 import { headers } from "next/headers";
 import { contractActiveOn, isBillable } from "@/lib/billing";
+import { documentLink } from "@/lib/documents";
 import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
 import { Console, type AgencyView, type ConsoleData } from "@/components/console/Console";
 import { MODELS } from "@/lib/agent/models";
@@ -99,6 +100,8 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     store.listConnectors(tenant.id),
   ]);
   const tasks = await store.listTasks(tenant.id, "open");
+  const docs = await store.listDocuments(tenant.id, 6);
+  const documents = await Promise.all(docs.map(async (d) => ({ id: d.id, title: d.title, kind: d.kind, createdAt: d.createdAt, url: await documentLink(d) })));
   const tokens = await Promise.all(connectors.map((c) => (c.auth === "bearer" ? getConfig(tenant.id, tokenKey(c.id)) : Promise.resolve(undefined))));
 
   const billableThisMonth: Record<string, number> = {};
@@ -131,6 +134,7 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     team,
     roi,
     tasks,
+    documents,
     connectors: connectors.map((c, i) => ({ ...c, hasToken: Boolean(tokens[i]) })),
   };
   return <Console data={data} />;

@@ -8,6 +8,9 @@ import { runChatCompletions } from "@/lib/agent/chatCompletions";
 import { costUsd, getModel, type ModelInfo } from "@/lib/agent/models";
 import { budgetExceeded, evaluate, monthStartIso, worksWithTeam } from "@/lib/agent/policy";
 import { MANAGERS, describeTasks, dueAtFrom, messageStaff, whenIn } from "@/lib/staffDesk";
+import { buildExcel, buildWord, documentLink, LINK_DAYS, saveDocument, type Sheet } from "@/lib/documents";
+import { emailConfigured, splitAddresses } from "@/lib/email";
+import { sendOrAsk } from "@/lib/officeMail";
 import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
@@ -135,6 +138,64 @@ const OFFICE_TOOL_DEFS: BetaTool[] = [
       type: "object",
       properties: { id: { type: "string" }, note: { type: "string" }, cancelled: { type: "boolean" } },
       required: ["id"],
+    },
+  },
+];
+
+const EMAIL_TOOL_DEF: BetaTool = {
+  name: "send_email",
+  description: "Send an email from the business's mailbox. Emails to the business's own staff go straight out; to anyone else (guests, suppliers) they wait for a person's approval. You can attach documents you created.",
+  input_schema: {
+    type: "object",
+    properties: {
+      to: { type: "array", items: { type: "string" }, description: "Email addresses." },
+      subject: { type: "string" },
+      body: { type: "string", description: "Plain text, signed off with your name and the business's name." },
+      document_ids: { type: "array", items: { type: "string" }, description: "Ids from create_document to attach." },
+    },
+    required: ["to", "subject", "body"],
+  },
+};
+
+const PAPERWORK_TOOL_DEFS: BetaTool[] = [
+  {
+    name: "add_calendar_entry",
+    description: "Put something in people's calendars: sends a calendar invite (works with Google, Outlook and Apple) from the business's mailbox. Staff invites go straight out; anyone else waits for approval.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        start: { type: "string", description: "Business time: YYYY-MM-DD HH:MM." },
+        minutes: { type: "number", description: "Length, default 60." },
+        attendees: { type: "array", items: { type: "string" }, description: "Email addresses." },
+        location: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["title", "start", "attendees"],
+    },
+  },
+  {
+    name: "create_document",
+    description: "Create a document and get a download link (valid 7 days) and an id to attach to emails. kind 'letter' is a letter on the business's letterhead, 'word' a Word document, 'excel' a spreadsheet.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["letter", "word", "excel"] },
+        title: { type: "string", description: "Document title, or the letter's subject line." },
+        body: { type: "string", description: "letter/word: the text. Blank lines between paragraphs, '# ' for headings, '- ' for bullets." },
+        to: { type: "string", description: "letter: recipient name and address, one line each." },
+        sign_off: { type: "string", description: "letter: e.g. 'Kind regards,\nCoco\nOperations, Sunsational Tobago'." },
+        sheets: {
+          type: "array",
+          description: "excel: one or more sheets.",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, columns: { type: "array", items: { type: "string" } }, rows: { type: "array", items: { type: "array", items: { type: ["string", "number", "null"] } } } },
+            required: ["name", "columns", "rows"],
+          },
+        },
+      },
+      required: ["kind", "title"],
     },
   },
 ];
@@ -318,6 +379,58 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       const sent = await messageStaff(tenant, { agent: agent.name, to: t.assignee, text: `New follow-up: "${t.title}", by ${when}.${t.detail ? ` ${t.detail}` : ""}`, conversationId: conversation.id, taskId: t.id, kind: "follow_up" });
       return ev("ran", `Follow-up ${t.id} set for ${t.assignee}, due ${when}.${sent ? " They've been told." : " No staff channel is set up, so tell them in your reply."}`);
     }
+    case "send_email": {
+      const to = splitAddresses(input.to);
+      if (!to.length) return ev("error", "Give at least one valid email address.");
+      if (!(await emailConfigured(tenant.id))) return ev("error", "This business has no mailbox set up for AI staff yet. Say the team will email them, or escalate.");
+      const docIds = Array.isArray(input.document_ids) ? input.document_ids.map(String) : [];
+      try {
+        const r = await sendOrAsk(store, tenant, agent, conversation.id, { to, subject: String(input.subject ?? "").slice(0, 200), text: String(input.body ?? ""), documentIds: docIds });
+        return ev(r.outcome, r.result);
+      } catch (err) {
+        return ev("error", `The email couldn't be sent (${err instanceof Error ? err.message : "error"}).`);
+      }
+    }
+    case "add_calendar_entry": {
+      const to = splitAddresses(input.attendees);
+      const start = dueAtFrom(String(input.start ?? ""), tenant.timezone);
+      if (!to.length || !start) return ev("error", "Give attendees' email addresses and a start as YYYY-MM-DD HH:MM.");
+      if (!(await emailConfigured(tenant.id))) return ev("error", "This business has no mailbox set up yet, so invites can't be sent. Use add_follow_up or tell the team instead.");
+      const minutes = Math.min(24 * 60, Math.max(5, Number(input.minutes) || 60));
+      const end = new Date(new Date(start).getTime() + minutes * 60_000).toISOString();
+      const title = String(input.title ?? "").slice(0, 200);
+      const when = whenIn(start, tenant.timezone);
+      try {
+        const r = await sendOrAsk(store, tenant, agent, conversation.id, {
+          to,
+          subject: `Invitation: ${title}, ${when}`,
+          text: `${title}\n${when} (${minutes} minutes)${input.location ? `\n${input.location}` : ""}${input.notes ? `\n\n${input.notes}` : ""}\n\n${agent.name}, ${tenant.name}`,
+          invite: { title, startUtc: start, endUtc: end, location: input.location ? String(input.location) : undefined, notes: input.notes ? String(input.notes) : undefined },
+        });
+        return ev(r.outcome, r.result);
+      } catch (err) {
+        return ev("error", `The invite couldn't be sent (${err instanceof Error ? err.message : "error"}).`);
+      }
+    }
+    case "create_document": {
+      const kind = input.kind === "excel" || input.kind === "letter" ? input.kind : "word";
+      const title = String(input.title ?? "Document").slice(0, 150);
+      try {
+        const content =
+          kind === "excel"
+            ? await buildExcel(tenant, { title, sheets: (Array.isArray(input.sheets) ? input.sheets : []) as Sheet[] })
+            : await buildWord(tenant, {
+                title,
+                body: String(input.body ?? ""),
+                letter: kind === "letter" ? { to: input.to ? String(input.to) : undefined, signOff: input.sign_off ? String(input.sign_off) : `Kind regards,\n${agent.name}\n${tenant.name}` } : undefined,
+              });
+        const doc = await saveDocument(store, tenant.id, { agentId: agent.id, title, kind, content });
+        const link = await documentLink(doc);
+        return ev("ran", `Created ${doc.filename} (id ${doc.id}).${link ? ` Download link, valid ${LINK_DAYS} days: ${link}` : ""} Attach it to an email with send_email, or share the link with message_staff.`);
+      } catch (err) {
+        return ev("error", `The document couldn't be created (${err instanceof Error ? err.message : "error"}).`);
+      }
+    }
     case "list_follow_ups":
       return ev("ran", describeTasks(await store.listTasks(tenant.id, "open"), tenant.timezone));
     case "close_follow_up": {
@@ -437,7 +550,8 @@ export async function runAgent(args: {
   const connectorTools = await connectorToolsFor(store, tenant.id, agent);
   const tools = [
     ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
-    ...(worksWithTeam(agent) ? OFFICE_TOOL_DEFS : []),
+    ...(worksWithTeam(agent) ? [...OFFICE_TOOL_DEFS, ...PAPERWORK_TOOL_DEFS] : []),
+    EMAIL_TOOL_DEF,
     ...asModelTools(connectorTools),
   ];
   const history = await store.listMessages(tenant.id, conversation.id);

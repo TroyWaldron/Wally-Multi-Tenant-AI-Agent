@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Bot, ListChecks, ClipboardCheck, Coins, Inbox, ScrollText, TrendingUp } from "lucide-react";
+import { AlertTriangle, Bot, FileText, ListChecks, ClipboardCheck, Coins, Inbox, ScrollText, TrendingUp } from "lucide-react";
 import type { TenantData, ViewId } from "../Console";
 import { HEALTH_LABEL } from "@/lib/team";
 import { HEALTH_DOT } from "../OrgChart";
@@ -122,6 +122,20 @@ export function DashboardView({ data, onNavigate }: { data: TenantData; onNaviga
                     </div>
                   );
                 })}
+              </div>
+            </>
+          )}
+          {data.documents.length > 0 && (
+            <>
+              <div className="mt-5"><SectionTitle icon={FileText}>Documents the AI staff made</SectionTitle></div>
+              <div className={`${cardClass} divide-y divide-ink/5`}>
+                {data.documents.map((d) => (
+                  <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-ink">{d.title}</span>
+                    <span className="text-xs text-slate/55">{d.kind === "excel" ? "Excel" : d.kind === "letter" ? "Letter" : "Word"} · {timeAgo(d.createdAt)}</span>
+                    {d.url && <a href={d.url} className="text-xs font-semibold text-lagoon hover:text-lagoon-deep">Download</a>}
+                  </div>
+                ))}
               </div>
             </>
           )}
