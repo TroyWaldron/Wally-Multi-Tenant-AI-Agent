@@ -126,3 +126,42 @@ function slackAlertOf(data: Record<string, unknown>) {
 export function runWorkflow(tenant: Pick<Tenant, "id" | "slug" | "name">, workflow: string, input: Record<string, unknown>, context: Record<string, unknown>) {
   return post(tenant, { kind: "workflow", workflow, input, context }, 25_000);
 }
+
+export type BookingRequest = {
+  conversationId: string;
+  channel: string;
+  agent: string;
+  contact: Conversation["contact"];
+  villa?: string;
+  checkIn?: string;
+  checkOut?: string;
+  guests?: number;
+  quote?: string;
+  notes?: string;
+  /** True when the agent sent this chat's request before and this corrects it. */
+  update: boolean;
+};
+
+/**
+ * Puts a customer's booking request into the business's own back office
+ * (Sunsational's Bookings list), so a person, or the coordinator, follows it
+ * up. Nothing is sent to the customer. Says whether the back office saved it,
+ * or that the business has no back office linked.
+ */
+export async function sendBookingRequest(tenant: Pick<Tenant, "id">, r: BookingRequest): Promise<"saved" | "failed" | "no_back_office"> {
+  const [url, secret] = await Promise.all([getConfig(tenant.id, "BACKOFFICE_ALERT_URL"), getConfig(tenant.id, "WIDGET_RELAY_SECRET")]);
+  if (!url || !secret) return "no_back_office";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Wally-Relay-Secret": secret },
+      body: JSON.stringify({ event: "booking_request", ...r, sentAt: new Date().toISOString() }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error(`back office booking request failed: HTTP ${res.status}`);
+    return res.ok ? "saved" : "failed";
+  } catch (err) {
+    console.error("back office booking request failed:", err);
+    return "failed";
+  }
+}

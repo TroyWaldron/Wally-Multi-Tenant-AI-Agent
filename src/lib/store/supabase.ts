@@ -514,6 +514,20 @@ export function supabaseStore(db: SupabaseClient): Store {
       assertTenant(tenantId);
       must(await db.from("conversations").update({ status, updated_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", id));
     },
+    async setConversationContact(tenantId, id, contact) {
+      assertTenant(tenantId);
+      const r = must(await db.from("conversations").select("contact").eq("tenant_id", tenantId).eq("id", id).maybeSingle());
+      if (!r) return;
+      must(await db.from("conversations").update({ contact: { ...((r.contact as object) ?? {}), ...contact } }).eq("tenant_id", tenantId).eq("id", id));
+    },
+    async closeQuietConversations(tenantId, channels, quietSinceIso) {
+      assertTenant(tenantId);
+      // Leaves updated_at alone, so the chat still shows when it went quiet.
+      const rows = must(
+        await db.from("conversations").update({ status: "closed" }).eq("tenant_id", tenantId).eq("status", "open").in("channel", channels).lt("updated_at", quietSinceIso).select("*")
+      );
+      return rows.map(conversation);
+    },
     async listMessages(tenantId, conversationId) {
       assertTenant(tenantId);
       return must(await db.from("messages").select("*").eq("tenant_id", tenantId).eq("conversation_id", conversationId).order("id")).map(message);

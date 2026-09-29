@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { safeEqual } from "@/lib/secrets";
 import { systemStore } from "@/lib/session";
 import { chaseDueTasks } from "@/lib/staffDesk";
+import { closeQuietChats } from "@/lib/agent/inbound";
 
 /**
  * Sends reminders for due follow-ups across every business. Called by Vercel
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
   for (const t of await store.listTenants()) {
     if (t.status === "paused" || t.status === "offboarded") continue;
     chased += (await chaseDueTasks(store, t, { force: true })).chased;
+    await closeQuietChats(store, t).catch((err) => console.error("quiet chat sweep failed", err));
   }
   return NextResponse.json({ ok: true, chased });
 }

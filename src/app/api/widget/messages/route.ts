@@ -31,5 +31,5 @@ export async function GET(req: NextRequest) {
   const messages = (await store.listMessages(tenant.id, conv.id))
     .filter((m) => m.role === "staff" && m.id > after)
     .map((m) => ({ id: m.id, text: m.content }));
-  return NextResponse.json({ waiting: conv.status === "waiting_human", messages }, { headers: CORS_HEADERS });
+  return NextResponse.json({ waiting: conv.status === "waiting_human", closed: conv.status === "closed", messages }, { headers: CORS_HEADERS });
 }

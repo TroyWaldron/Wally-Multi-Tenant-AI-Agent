@@ -16,7 +16,7 @@ import { findColleague, teamLine } from "@/lib/agent/colleagues";
 import { searchKnowledge } from "@/lib/embeddings";
 import { syncKnowledgeIfStale } from "@/lib/knowledgeSync";
 import { asModelTools, callConnectorTool, connectorToolsFor, type ConnectorTool } from "@/lib/mcp";
-import { notify, runWorkflow } from "@/lib/n8n";
+import { notify, runWorkflow, sendBookingRequest } from "@/lib/n8n";
 import { getRole, renderPrompt } from "@/lib/roles";
 import { getConfig } from "@/lib/settings";
 import { withVariant } from "@/lib/personas";
@@ -43,14 +43,21 @@ const TOOLS: BetaTool[] = [
   },
   {
     name: "capture_lead",
-    description: "Save a new enquiry's contact details and what they are interested in. Use once you have a name and at least a phone or email.",
+    description:
+      "Pass a customer's enquiry or booking request to the team: saves their contact details and puts the request in the business's bookings list for a person to follow up. Use it as soon as they want to book or enquire and you have a name and an email or phone. If they change anything later (dates, villa, group size, extra wishes), call it again with the full, corrected details: it updates the same request.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string" },
         phone: { type: "string" },
         email: { type: "string" },
-        interest: { type: "string", description: "What they want, with dates, group size and budget if known." },
+        interest: { type: "string", description: "What they want, in a sentence, with dates, group size and budget if known." },
+        villa: { type: "string", description: "The villa id they chose, if any." },
+        check_in: { type: "string", description: "YYYY-MM-DD" },
+        check_out: { type: "string", description: "YYYY-MM-DD" },
+        guests: { type: "number" },
+        quote: { type: "string", description: "The price you quoted from the workflow, e.g. 'TT$1,600 a night, TT$4,800 for 3 nights'." },
+        notes: { type: "string", description: "Anything else they asked the team for." },
       },
       required: ["name", "interest"],
     },
@@ -92,6 +99,11 @@ const TOOLS: BetaTool[] = [
       },
       required: ["action", "summary"],
     },
+  },
+  {
+    name: "end_chat",
+    description: "Close this chat once the customer is done (they say goodbye, 'no thanks', 'that's all'). Send your short goodbye in the same reply. If they write again later, the chat reopens.",
+    input_schema: { type: "object", properties: { summary: { type: "string", description: "One line for the team: what they wanted and what happened." } }, required: ["summary"] },
   },
   {
     name: "escalate_to_human",
@@ -273,6 +285,15 @@ export function humanize(text: string) {
     .replace(/,\s*([,.!?])/g, "$1");
 }
 
+// For agents who talk to customers: every request reaches a person, nothing
+// is claimed that didn't happen, and every chat ends.
+const CUSTOMER_RULES = `Looking after requests:
+- When the customer wants to book or enquire, get their name and an email or phone, then call capture_lead with the villa, dates, group size and your quote. This is how the team gets it; you never book or confirm anything yourself.
+- If they change anything afterwards (dates, villa, guests) or ask the team for something extra, call capture_lead again with the full corrected details before you reply.
+- Only say you saved, passed on, sent or updated something when a tool did it in this chat and said so. Otherwise say what you will do and do it.
+- If a date is in the past or doesn't exist, ask what they meant instead of guessing.
+- When they're done (goodbye, "no thanks", "that's all"), say a short goodbye and call end_chat.`;
+
 export function buildSystemPrompt(tenant: Tenant, agent: Agent, team: Agent[] = []) {
   const role = getRole(agent.templateKey);
   const base = renderPrompt(role?.systemPrompt ?? "You are an AI assistant for {{tenant}}.", {
@@ -301,6 +322,7 @@ Decision boundaries:
 - Workflows you can run: ${b.workflows.join(", ") || "none"}
 - You cannot: ${b.cannot.join("; ") || "no extra limits"}
 ${b.hours ? `- Working hours: ${b.hours}` : ""}
+${worksWithTeam(agent) ? "" : `\n${CUSTOMER_RULES}`}
 ${worksWithTeam(agent) ? `\nYou work with the ${tenant.name} team, not its customers. When something needs a person, message them (message_staff) or set a follow-up with a due time (add_follow_up); Wally reminds them and tells the managers if it's ignored. Close follow-ups when people confirm. Keep messages short, like texting a colleague.` : ""}
 ${agent.instructions ? `\nInstructions from the business:\n${agent.instructions}` : ""}`.trim();
 }
@@ -311,6 +333,20 @@ export type ToolContext = { store: Store; tenant: Tenant; agent: Agent; conversa
 // is simulated so a test never creates a lead, an approval or a handover.
 const READ_ONLY_WORKFLOWS = new Set(["check_availability", "quote_price", "list_payments", "list_bookings", "check_calendar"]);
 
+/** The agent tried to book (a create_enquiry workflow, tool or approval): that is a request for the team. */
+function isBookingRequest(name: string, input: Record<string, unknown>) {
+  if (name === "create_enquiry") return true;
+  if (name === "run_workflow") return input.workflow === "create_enquiry";
+  if (name === "request_approval") return input.action === "create_enquiry";
+  return false;
+}
+
+function bookingInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
+  const d = ((name === "run_workflow" ? input.input : name === "request_approval" ? input.details : input) ?? {}) as Record<string, unknown>;
+  const summary = name === "request_approval" && typeof input.summary === "string" ? input.summary : "";
+  return { ...d, name: d.name ?? "Guest", interest: d.interest ?? (summary || "Booking request"), notes: [d.note, d.notes].filter(Boolean).join(". ") || undefined, quote: d.quote ?? d.rate };
+}
+
 export async function executeTool(block: { name: string; input: unknown }, ctx: ToolContext): Promise<ToolEvent> {
   const { store, tenant, agent, conversation } = ctx;
   const input = (block.input ?? {}) as Record<string, unknown>;
@@ -318,6 +354,11 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
 
   const ct = ctx.connectorTools?.get(block.name);
   if (ct) return runConnectorTool(ct, input, ctx, ev);
+
+  // A booking request always goes to the team as a request; the agent never books.
+  if (isBookingRequest(block.name, input) && agent.boundaries.allowedTools.includes("capture_lead")) {
+    return executeTool({ name: "capture_lead", input: bookingInput(block.name, input) }, ctx);
+  }
 
   if (ctx.dryRun && block.name !== "search_knowledge" && !(block.name === "run_workflow" && READ_ONLY_WORKFLOWS.has(String(input.workflow)))) {
     const policy = evaluate(agent, block.name, input);
@@ -356,11 +397,57 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       return ev("ran", hits.map((h) => `## ${h.title}\n${h.content}`).join("\n\n"));
     }
     case "capture_lead": {
-      await store.recordOutcome(tenant.id, { agentId: agent.id, kind: "lead", value: 0, note: `${input.name}: ${input.interest}` });
+      const str = (k: string) => (typeof input[k] === "string" && String(input[k]).trim() ? String(input[k]).trim().slice(0, 500) : undefined);
+      const contact = Object.fromEntries(Object.entries({ name: str("name"), email: str("email"), phone: str("phone") }).filter(([, v]) => v)) as Conversation["contact"];
+      await store.setConversationContact(tenant.id, conversation.id, contact);
+      const known = { ...conversation.contact, ...contact };
+      // The same chat's request is updated, not duplicated.
+      const before = (await store.listMessages(tenant.id, conversation.id)).some((m) =>
+        ((m.meta?.toolEvents as ToolEvent[] | undefined) ?? []).some((e) => e.tool === "capture_lead" && e.outcome === "ran")
+      );
+      if (!before) await store.recordOutcome(tenant.id, { agentId: agent.id, kind: "lead", value: 0, note: `${input.name}: ${input.interest}` });
       // Ties the lead to its chat, so A/B tests can compare personas.
-      await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "lead.captured", detail: { conversationId: conversation.id } });
-      notify(tenant, "lead_captured", { lead: input, conversationId: conversation.id, agent: agent.name });
-      return ev("ran", "Lead saved and the team notified.");
+      await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: before ? "lead.updated" : "lead.captured", detail: { conversationId: conversation.id } });
+      notify(tenant, "lead_captured", { lead: input, conversationId: conversation.id, agent: agent.name, update: before });
+      const guests = Number(input.guests);
+      const sent = await sendBookingRequest(tenant, {
+        conversationId: conversation.id,
+        channel: conversation.channel,
+        agent: agent.name,
+        contact: known,
+        villa: str("villa"),
+        checkIn: str("check_in"),
+        checkOut: str("check_out"),
+        guests: Number.isFinite(guests) && guests > 0 ? Math.round(guests) : undefined,
+        quote: str("quote"),
+        notes: [str("interest"), str("notes")].filter(Boolean).join(". ") || undefined,
+        update: before,
+      });
+      // The back office couldn't take it: the managers get it as a request to review instead, so it's never lost.
+      if (sent === "failed") {
+        const who = [known.name, known.email, known.phone].filter(Boolean).join(", ");
+        const a = await store.createApproval(tenant.id, {
+          agentId: agent.id,
+          conversationId: conversation.id,
+          kind: "action",
+          action: "booking_request",
+          summary: `Booking request to follow up: ${who || "guest"}. ${[str("villa"), str("check_in") && `${str("check_in")} to ${str("check_out") ?? "?"}`, input.guests && `${input.guests} guests`, str("quote"), str("notes")].filter(Boolean).join(", ")}`.slice(0, 500),
+          payload: { ...input, contact: known },
+        });
+        notify(tenant, "approval_requested", { approval: a });
+      }
+      const missing = !known.email && !known.phone ? " They gave no email or phone yet: ask for one so the team can reach them, then call this again." : "";
+      return ev(
+        "ran",
+        sent === "saved"
+          ? `${before ? "Request updated" : "Request saved"} in the team's bookings list and staff alerted. Nothing was sent to the customer and nothing is booked or confirmed: tell them the team will contact them to confirm.${missing}`
+          : `Details saved and the team notified. Nothing is booked or confirmed: tell them the team will contact them.${missing}`
+      );
+    }
+    case "end_chat": {
+      await store.setConversationStatus(tenant.id, conversation.id, "closed");
+      await store.audit(tenant.id, { actorType: "agent", actor: agent.name, action: "chat.closed", detail: { conversationId: conversation.id, summary: String(input.summary ?? "").slice(0, 300) } });
+      return ev("ran", "Chat closed. Your goodbye is the last message.");
     }
     case "record_outcome": {
       await store.recordOutcome(tenant.id, { agentId: agent.id, kind: String(input.kind), value: Number(input.value ?? 0), note: String(input.note ?? "") });
@@ -614,13 +701,15 @@ export async function runAgent(args: {
   dryRun?: boolean;
   /** Set when a colleague asked: this agent can't ask a colleague in turn. */
   depth?: number;
+  /** A person was asked to join but hasn't replied yet: the agent keeps helping meanwhile. */
+  waitingForPerson?: boolean;
 }): Promise<AgentRun> {
-  const { store, tenant, conversation, text, dryRun, depth } = args;
+  const { store, tenant, conversation, text, dryRun, depth, waitingForPerson } = args;
   const agent = await withVariant(store, args.agent, conversation.variant);
   const empty = { toolEvents: [], model: null, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
   await store.addMessage(tenant.id, { conversationId: conversation.id, role: "user", content: text });
-  if (!dryRun) notify(tenant, "message_received", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, text });
+  if (!dryRun) notify(tenant, "message_received", { conversationId: conversation.id, channel: conversation.channel, contact: conversation.contact, text, ...(waitingForPerson ? { waitingHuman: true } : {}) });
 
   const finish = async (run: AgentRun) => {
     await store.addMessage(tenant.id, {
@@ -660,10 +749,16 @@ export async function runAgent(args: {
 
   await syncKnowledgeIfStale(tenant);
   const team = await store.listAgents(tenant.id);
-  const system = buildSystemPrompt(tenant, agent, team);
+  const system = `${buildSystemPrompt(tenant, agent, team)}${
+    waitingForPerson
+      ? "\n\nA team member has been asked to join this chat and hasn't replied yet. Keep helping with what you can, and say they'll join here soon; don't call escalate_to_human again."
+      : ""
+  }`;
   const connectorTools = await connectorToolsFor(store, tenant.id, agent);
   const tools = [
-    ...TOOLS.filter((t) => t.name === "request_approval" || t.name === "escalate_to_human" || agent.boundaries.allowedTools.includes(t.name)),
+    ...TOOLS.filter(
+      (t) => t.name === "request_approval" || t.name === "escalate_to_human" || (t.name === "end_chat" && !worksWithTeam(agent)) || agent.boundaries.allowedTools.includes(t.name)
+    ),
     ...(worksWithTeam(agent) ? [...OFFICE_TOOL_DEFS, ...PAPERWORK_TOOL_DEFS] : []),
     EMAIL_TOOL_DEF,
     ...DRAFT_TOOL_DEFS,

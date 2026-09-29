@@ -385,6 +385,17 @@ export const memoryStore: Store = {
     const c = db().conversations.find((x) => x.tenantId === tenantId && x.id === id);
     if (c) Object.assign(c, { status, updatedAt: now() });
   },
+  async setConversationContact(tenantId, id, contact) {
+    assertTenant(tenantId);
+    const c = db().conversations.find((x) => x.tenantId === tenantId && x.id === id);
+    if (c) c.contact = { ...c.contact, ...contact };
+  },
+  async closeQuietConversations(tenantId, channels, quietSinceIso) {
+    assertTenant(tenantId);
+    const quiet = db().conversations.filter((c) => c.tenantId === tenantId && c.status === "open" && channels.includes(c.channel) && c.updatedAt < quietSinceIso);
+    for (const c of quiet) c.status = "closed";
+    return quiet;
+  },
   async listMessages(tenantId, conversationId) {
     assertTenant(tenantId);
     return db().messages.filter((m) => m.tenantId === tenantId && m.conversationId === conversationId);

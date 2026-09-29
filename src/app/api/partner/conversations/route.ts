@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { closeQuietChats } from "@/lib/agent/inbound";
 import { HELPDESK_CHANNEL } from "@/lib/helpdesk";
 import { partnerContext } from "@/lib/partnerAuth";
 
@@ -6,6 +7,8 @@ import { partnerContext } from "@/lib/partnerAuth";
 export async function GET(req: NextRequest) {
   const ctx = await partnerContext(req);
   if ("error" in ctx) return ctx.error;
+  // Staff see quiet chats as closed, not as still going.
+  await closeQuietChats(ctx.store, ctx.tenant).catch((err) => console.error("quiet chat sweep failed", err));
   const [conversations, agents] = await Promise.all([ctx.store.listConversations(ctx.tenant.id, 100), ctx.store.listAgents(ctx.tenant.id)]);
   const agentOf = (id: string | null) => {
     const a = id ? agents.find((x) => x.id === id) : undefined;

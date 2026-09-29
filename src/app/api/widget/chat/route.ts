@@ -7,6 +7,10 @@ import { visitorOf } from "@/lib/widgetVisitor";
 
 const Body = z.object({ key: z.string(), text: z.string().max(4000), conversationId: z.string().uuid().nullish() });
 
+async function isWaiting(store: ReturnType<typeof systemStore>, tenantId: string, id: string) {
+  return (await store.getConversation(tenantId, id))?.status === "waiting_human";
+}
+
 export function OPTIONS() {
   return new NextResponse(null, { headers: CORS_HEADERS });
 }
@@ -23,7 +27,7 @@ export async function POST(req: NextRequest) {
   try {
     const r = await handleInbound({ store, tenant, channel: "web", text: parsed.data.text, conversationId: parsed.data.conversationId });
     // The widget only needs the reply; tool details stay in the console.
-    return NextResponse.json({ conversationId: r.conversationId, reply: r.reply, waiting: r.mode === "waiting_human" }, { headers: CORS_HEADERS });
+    return NextResponse.json({ conversationId: r.conversationId, reply: r.reply, waiting: r.mode === "waiting_human" || (await isWaiting(store, tenant.id, r.conversationId)), closed: r.closed ?? false }, { headers: CORS_HEADERS });
   } catch (err) {
     const status = err instanceof InboundError ? err.status : 500;
     const message = err instanceof InboundError ? err.message : "Something went wrong.";

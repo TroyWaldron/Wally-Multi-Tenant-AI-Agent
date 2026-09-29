@@ -5,7 +5,7 @@ import type { Agent } from "@/lib/types";
 export type PolicyDecision = { decision: "allow" } | { decision: "approval"; reason: string } | { decision: "deny"; reason: string };
 
 // Tools that are how an agent asks for help; never blocked, or it could get stuck.
-const ALWAYS_ALLOWED = new Set(["request_approval", "escalate_to_human"]);
+const ALWAYS_ALLOWED = new Set(["request_approval", "escalate_to_human", "end_chat"]);
 
 /** Tools back-office AI staff get for working with the team (see staffDesk.ts). */
 export const OFFICE_TOOLS = new Set(["message_staff", "add_follow_up", "list_follow_ups", "close_follow_up", "add_calendar_entry", "create_document"]);

@@ -81,6 +81,10 @@ export interface Store {
   findOpenConversation(tenantId: string, channel: string, contactKey: string): Promise<Conversation | null>;
   createConversation(tenantId: string, c: Pick<Conversation, "agentId" | "channel" | "contact" | "variant">): Promise<Conversation>;
   setConversationStatus(tenantId: string, id: string, status: Conversation["status"]): Promise<void>;
+  /** Saves who the customer is (merged into what's known), so staff can follow up. */
+  setConversationContact(tenantId: string, id: string, contact: Conversation["contact"]): Promise<void>;
+  /** Closes open chats on these channels quiet since a moment; returns the ones it closed. */
+  closeQuietConversations(tenantId: string, channels: string[], quietSinceIso: string): Promise<Conversation[]>;
   listMessages(tenantId: string, conversationId: string): Promise<Message[]>;
   addMessage(tenantId: string, m: Pick<Message, "conversationId" | "role" | "content"> & { meta?: Record<string, unknown> }): Promise<Message>;
 
