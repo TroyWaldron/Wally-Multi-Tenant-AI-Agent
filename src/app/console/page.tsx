@@ -12,6 +12,8 @@ import { N8N_EVENTS } from "@/lib/n8n";
 import { ROLE_LIBRARY } from "@/lib/roles";
 import { requireSession, systemStore } from "@/lib/session";
 import { getConfig, settingsStatus } from "@/lib/settings";
+import { listPeople } from "@/lib/people";
+import type { BusinessSummary, ViewId } from "@/components/console/Console";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +24,16 @@ function windowStart(now: number, monthStart: string) {
   return since30 < monthStart ? since30 : monthStart;
 }
 
-export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ t?: string }> }) {
+const WALLY_VIEWS: ViewId[] = ["overview", "people", "account"];
+
+export default async function ConsolePage({ searchParams }: { searchParams: Promise<{ t?: string; v?: string }> }) {
   const session = await requireSession();
   const { store } = session;
   const tenants = await store.listTenants();
-  const { t } = await searchParams;
+  const { t, v } = await searchParams;
+  // The Wally team lands on Wally's own overview; picking a business opens it.
+  const initialView: ViewId | null =
+    v === "account" || (session.isPlatformAdmin && WALLY_VIEWS.includes(v as ViewId)) ? (v as ViewId) : session.isPlatformAdmin && !t ? "overview" : null;
   const tenant = tenants.find((x) => x.slug === t) ?? tenants[0] ?? null;
 
   // Agencies this person can see (all for the Wally team, their own for an
@@ -60,6 +67,40 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     ? { name: brandAgency.branding.brandName, color: brandAgency.branding.color ?? null, logo: brandAgency.branding.logo ?? null }
     : null;
 
+  // Wally-level views: every business at a glance, and who can sign in.
+  let overview: BusinessSummary[] = [];
+  let people: Awaited<ReturnType<typeof listPeople>> = [];
+  if (session.isPlatformAdmin) {
+    const monthStartAll = monthStartIso();
+    overview = await Promise.all(
+      tenants.map(async (x) => {
+        const [agents, chats, approvals, contracts, open] = await Promise.all([
+          store.listAgents(x.id),
+          store.listConversationsSince(x.id, monthStartAll),
+          store.listApprovals(x.id),
+          store.listContracts(x.id),
+          store.listConversations(x.id, 150),
+        ]);
+        const active = contracts.filter((c) => contractActiveOn(c, today));
+        return {
+          id: x.id,
+          name: x.name,
+          slug: x.slug,
+          status: x.status,
+          agency: agencyList.find((a) => a.id === x.agencyId)?.name ?? null,
+          aiStaffLive: agents.filter((a) => a.status === "live").length,
+          chatsThisMonth: chats.filter((c) => c.channel !== HELPDESK_CHANNEL).length,
+          waitingForPerson: open.filter((c) => c.status === "waiting_human" && c.channel !== HELPDESK_CHANNEL).length,
+          helpdeskOpen: open.filter((c) => c.channel === HELPDESK_CHANNEL && c.status !== "closed").length,
+          pendingApprovals: approvals.filter((a) => a.status === "pending").length,
+          monthlyPrice: active.reduce((sum, c) => sum + c.monthlyFee, 0),
+          currency: active[0]?.currency ?? x.currency,
+        };
+      })
+    );
+    if (session.mode === "supabase") people = await listPeople();
+  }
+
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host") ?? "localhost:3000"}`;
   const now = new Date().getTime();
@@ -77,6 +118,9 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     roles: ROLE_LIBRARY,
     models: MODELS,
     n8nEvents: [...N8N_EVENTS],
+    initialView,
+    overview,
+    people,
   };
 
   if (!tenant) return <Console data={{ ...base, tenant: null }} />;

@@ -23,7 +23,10 @@ import {
   BookOpen,
   LogOut,
   Receipt,
+  Globe2,
+  Users,
 } from "lucide-react";
+import type { Person } from "@/lib/access";
 import { logout } from "@/app/login/actions";
 import { WallyMark } from "@/components/WallyMark";
 import type { ModelInfo } from "@/lib/agent/models";
@@ -45,6 +48,25 @@ import { BusinessView } from "./views/Business";
 import { RoadmapView } from "./views/Roadmap";
 import { SettingsView } from "./views/Settings";
 import { BillingView } from "./views/Billing";
+import { OverviewView } from "./views/Overview";
+import { PeopleView } from "./views/People";
+import { AccountView } from "./views/Account";
+
+/** One business as the Wally team sees it on the overview. */
+export type BusinessSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  agency: string | null;
+  aiStaffLive: number;
+  chatsThisMonth: number;
+  waitingForPerson: number;
+  helpdeskOpen: number;
+  pendingApprovals: number;
+  monthlyPrice: number;
+  currency: string;
+};
 
 /** An agency with its client businesses and their monthly price (sum of active agreements). */
 export type AgencyView = Agency & {
@@ -69,6 +91,12 @@ type Base = {
   roles: RoleTemplate[];
   models: ModelInfo[];
   n8nEvents: { event: string; when: string }[];
+  /** View to open first (from ?v=, or Overview for the Wally team). */
+  initialView: ViewId | null;
+  /** Wally team only: every business at a glance. */
+  overview: BusinessSummary[];
+  /** Wally team only: everyone who can sign in, with their access. */
+  people: Person[];
 };
 
 export type TenantData = Base & {
@@ -101,6 +129,9 @@ export type TenantData = Base & {
 export type ConsoleData = (Base & { tenant: null }) | TenantData;
 
 export type ViewId =
+  | "overview"
+  | "people"
+  | "account"
   | "dashboard"
   | "agents"
   | "playground"
@@ -127,7 +158,7 @@ export function Console({ data }: { data: ConsoleData }) {
 
 function Shell({ data }: { data: ConsoleData }) {
   const router = useRouter();
-  const [view, setView] = useState<ViewId>(data.tenant ? "dashboard" : "business");
+  const [view, setView] = useState<ViewId>(data.initialView ?? (data.tenant ? "dashboard" : "business"));
   const [open, setOpen] = useState(false);
   const [playAgent, setPlayAgent] = useState<string | null>(null);
 
@@ -136,7 +167,19 @@ function Shell({ data }: { data: ConsoleData }) {
   const waiting = d?.conversations.filter((c) => c.status === "waiting_human").length ?? 0;
   const helpWaiting = d?.helpdesk.filter((c) => c.status === "waiting_human").length ?? 0;
 
+  const wallyAttention = data.overview.reduce((n, b) => n + b.helpdeskOpen, 0);
   const NAV: { group: string; items: { id: ViewId; label: string; icon: typeof LayoutGrid; badge?: number; needsTenant?: boolean }[] }[] = [
+    ...(data.isPlatformAdmin
+      ? [
+          {
+            group: "Wally",
+            items: [
+              { id: "overview" as ViewId, label: "All businesses", icon: Globe2, badge: wallyAttention },
+              { id: "people" as ViewId, label: "People", icon: Users },
+            ],
+          },
+        ]
+      : []),
     {
       group: "Run",
       items: [
@@ -174,7 +217,8 @@ function Shell({ data }: { data: ConsoleData }) {
     },
   ];
 
-  const all = NAV.flatMap((g) => g.items);
+  const all = [...NAV.flatMap((g) => g.items), { id: "account" as ViewId, label: "My account", icon: Users }];
+  const wallyLevel = view === "overview" || view === "people" || view === "account";
   const current = all.find((n) => n.id === view) ?? all[0];
   const go = (id: ViewId) => {
     setView(id);
@@ -219,10 +263,18 @@ function Shell({ data }: { data: ConsoleData }) {
           {data.tenants.length ? (
             <select
               id="tenant-switch"
-              value={data.tenant?.slug ?? ""}
-              onChange={(e) => router.push(`/console?t=${e.target.value}`)}
+              value={data.isPlatformAdmin && wallyLevel ? "" : (data.tenant?.slug ?? "")}
+              onChange={(e) => {
+                if (e.target.value) router.push(`/console?t=${e.target.value}`);
+                else go("overview");
+              }}
               className="mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white outline-none"
             >
+              {data.isPlatformAdmin && (
+                <option value="" className="text-ink">
+                  All businesses
+                </option>
+              )}
               {data.tenants.map((t) => (
                 <option key={t.id} value={t.slug} className="text-ink">
                   {t.name}
@@ -264,11 +316,13 @@ function Shell({ data }: { data: ConsoleData }) {
         </nav>
 
         <div className="flex items-center gap-3 border-t border-white/5 px-6 py-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-xs font-bold text-ink-deep">{data.user.email.slice(0, 1).toUpperCase()}</div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold text-white">{data.user.email}</div>
-            <div className="text-[10px] uppercase tracking-wide text-amber-light/70">{data.isPlatformAdmin ? "Platform admin" : data.agencyIds.length ? "Agency admin" : "Member"}</div>
-          </div>
+          <button onClick={() => go("account")} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:opacity-80" title="My account">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-xs font-bold text-ink-deep">{data.user.email.slice(0, 1).toUpperCase()}</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-semibold text-white">{data.user.email}</div>
+              <div className="text-[10px] uppercase tracking-wide text-amber-light/70">{data.isPlatformAdmin ? "Wally team" : data.agencyIds.length ? "Agency admin" : "Member"} · My account</div>
+            </div>
+          </button>
           <form action={logout}>
             <button className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">
               <LogOut className="h-4 w-4" />
@@ -292,7 +346,7 @@ function Shell({ data }: { data: ConsoleData }) {
             </button>
             <h1 className="font-heading text-2xl font-bold text-ink">{current.label}</h1>
           </div>
-          {data.tenant && (
+          {data.tenant && !wallyLevel && (
             <div className="flex items-center gap-2 text-xs text-slate/60">
               <Activity className="h-3.5 w-3.5 text-lagoon" />
               {data.tenant.name}
@@ -301,6 +355,9 @@ function Shell({ data }: { data: ConsoleData }) {
         </header>
 
         <div className="px-5 py-8 sm:px-8">
+          {view === "overview" && data.isPlatformAdmin && <OverviewView businesses={data.overview} />}
+          {view === "people" && data.isPlatformAdmin && <PeopleView data={data} />}
+          {view === "account" && <AccountView data={data} />}
           {d && view === "dashboard" && <DashboardView data={d} onNavigate={go} />}
           {d && view === "agents" && <AgentsView data={d} onTest={openPlayground} />}
           {d && view === "playground" && <PlaygroundView data={d} initialAgentId={playAgent} />}

@@ -6,7 +6,8 @@ import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
+  const { expired } = await searchParams;
   if (await getSession()) redirect("/console");
   const mode = isSupabaseConfigured() ? "supabase" : "demo";
 
@@ -23,6 +24,7 @@ export default async function LoginPage() {
         <p className="mb-6 mt-1 text-sm text-slate/60">
           {mode === "demo" ? "Demo mode: Supabase isn't connected yet, so data lives in memory." : "Manage your AI staff, approvals and settings."}
         </p>
+        {expired && <p className="mb-4 rounded-xl bg-amber/15 p-3 text-sm text-ink">That sign-in link was already used or has expired. Sign in below, or ask your admin for a new link.</p>}
         <LoginForm mode={mode} />
       </div>
     </main>
