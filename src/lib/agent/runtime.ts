@@ -58,6 +58,7 @@ const TOOLS: BetaTool[] = [
         guests: { type: "number" },
         quote: { type: "string", description: "The price you quoted from the workflow, e.g. 'TT$1,600 a night, TT$4,800 for 3 nights'." },
         notes: { type: "string", description: "Anything else they asked the team for." },
+        about: { type: "string", enum: ["stay", "property_management"], description: "stay (a guest wanting to book or enquire, the default) or property_management (an owner who wants the business to manage their property)." },
       },
       required: ["name", "interest"],
     },
@@ -421,6 +422,7 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
         guests: Number.isFinite(guests) && guests > 0 ? Math.round(guests) : undefined,
         quote: str("quote"),
         notes: [str("interest"), str("notes")].filter(Boolean).join(". ") || undefined,
+        about: input.about === "property_management" ? "property_management" : "stay",
         update: before,
       });
       // The back office couldn't take it: the managers get it as a request to review instead, so it's never lost.
@@ -440,7 +442,7 @@ export async function executeTool(block: { name: string; input: unknown }, ctx: 
       return ev(
         "ran",
         sent === "saved"
-          ? `${before ? "Request updated" : "Request saved"} in the team's bookings list and staff alerted. Nothing was sent to the customer and nothing is booked or confirmed: tell them the team will contact them to confirm.${missing}`
+          ? `${before ? "Request updated" : "Request saved"} in the team's ${input.about === "property_management" ? "leads" : "bookings"} list and staff alerted. Nothing was sent to the customer and nothing is booked or confirmed: tell them the team will contact them to confirm.${missing}`
           : `Details saved and the team notified. Nothing is booked or confirmed: tell them the team will contact them.${missing}`
       );
     }

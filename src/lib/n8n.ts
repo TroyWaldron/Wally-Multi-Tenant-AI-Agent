@@ -138,6 +138,8 @@ export type BookingRequest = {
   guests?: number;
   quote?: string;
   notes?: string;
+  /** A guest's stay (the default) or a property owner asking about management. */
+  about: "stay" | "property_management";
   /** True when the agent sent this chat's request before and this corrects it. */
   update: boolean;
 };
